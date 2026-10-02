@@ -7,6 +7,7 @@ Targets per crop and head, most trusted first:
 Heads with no target for a crop are masked out of the loss.
 
     python train/train.py --epochs 12
+    python train/train.py --init train/runs/round1.pt --epochs 4   # fine-tune
     python train/export.py            # → public/models/student.{onnx,json}
 """
 
@@ -160,6 +161,7 @@ def main():
     ap.add_argument("--epochs", type=int, default=12)
     ap.add_argument("--batch", type=int, default=64)
     ap.add_argument("--lr", type=float, default=1e-3)
+    ap.add_argument("--init", help="start from this checkpoint (fine-tune) instead of ImageNet weights")
     args = ap.parse_args()
 
     device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
@@ -174,7 +176,10 @@ def main():
                           persistent_workers=True, drop_last=True)
     val_dl = DataLoader(Crops(val_rows, False), batch_size=128, num_workers=4)
 
-    model = Student().to(device)
+    model = Student(pretrained=not args.init)
+    if args.init:
+        model.load_state_dict(torch.load(args.init, map_location="cpu"))
+    model = model.to(device)
     params = [
         {"params": model.backbone.parameters(), "lr": args.lr * 0.3},
         {"params": model.heads.parameters(), "lr": args.lr},

@@ -23,6 +23,8 @@ DATA = Path(__file__).resolve().parent / "data"
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--limit", type=int, default=0)
+    ap.add_argument("--fairface", type=int, default=12439,
+                    help="label only the first N FairFace crops in the manifest; the rest train gender/age/race only")
     args = ap.parse_args()
 
     rows = [json.loads(l) for l in (DATA / "manifest.jsonl").read_text().splitlines() if l]
@@ -30,7 +32,9 @@ def main():
     done = set()
     if out_path.exists():
         done = {json.loads(l)["path"] for l in out_path.read_text().splitlines() if l}
-    todo = [r for r in rows if r["path"] not in done]
+    fairface = [r["path"] for r in rows if r["source"] == "fairface"][: args.fairface]
+    keep = set(fairface)
+    todo = [r for r in rows if r["path"] not in done and (r["source"] != "fairface" or r["path"] in keep)]
     todo.sort(key=lambda r: (r["split"] != "val", r["source"] != "capture"))
     if args.limit:
         todo = todo[: args.limit]

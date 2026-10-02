@@ -4,6 +4,6 @@
 set -e
 cd "$(dirname "$0")"
 PY=.venv/bin/python
-$PY teacher/prepare.py --train 12000 --val 1500
+$PY teacher/prepare.py --train 100000 --val 20000   # all of FairFace
 (cd teacher && caffeinate -i ../$PY label.py)
 (cd train && $PY train.py --epochs ${EPOCHS:-12} && $PY export.py)

@@ -12,7 +12,7 @@ pyarrow==25.0.1
 torch==2.14.1
 torchvision==0.29.1
 timm==1.0.30
-onnx==1.23.1
-onnxscript==0.7.2
+onnx==1.16.2  # newer onnx needs protobuf>=5, which breaks mediapipe 0.10.21
 onnxruntime==1.30.0
 mediapipe==0.10.21  # 1.0.1 aborts on macOS (Metal service check) and hangs
+protobuf==4.25.9
