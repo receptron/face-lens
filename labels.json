@@ -1,0 +1,129 @@
+{
+  "version": 1,
+  "crop": {
+    "note": "Square crop around the MediaPipe landmark box. Shared by the browser, the teacher and training; change it and every crop must be regenerated.",
+    "scale": 1.7,
+    "shiftY": -0.12,
+    "saveSize": 384
+  },
+  "learned": {
+    "gender": {
+      "title": "Gender",
+      "question": "What is the apparent gender of the person?",
+      "classes": [
+        "female",
+        "male"
+      ],
+      "source": "fairface"
+    },
+    "age": {
+      "title": "Age group",
+      "question": "What is the apparent age group of the person?",
+      "classes": [
+        "0-9",
+        "10-19",
+        "20-29",
+        "30-39",
+        "40-49",
+        "50-59",
+        "60+"
+      ],
+      "source": "fairface"
+    },
+    "emotion": {
+      "title": "Emotion",
+      "question": "Which emotion does the person's face express most?",
+      "classes": [
+        "neutral",
+        "happy",
+        "sad",
+        "angry",
+        "surprised",
+        "fearful",
+        "disgusted"
+      ],
+      "source": "teacher"
+    },
+    "hair": {
+      "title": "Hair color",
+      "question": "What is the person's hair color?",
+      "classes": [
+        "black",
+        "brown",
+        "blonde",
+        "red",
+        "gray-white",
+        "dyed-other",
+        "bald-hidden"
+      ],
+      "source": "teacher"
+    },
+    "eyes": {
+      "title": "Eye color",
+      "question": "What is the person's eye (iris) color?",
+      "classes": [
+        "dark-brown",
+        "light-brown-hazel",
+        "green",
+        "blue",
+        "gray",
+        "not-visible"
+      ],
+      "source": "teacher"
+    },
+    "race": {
+      "title": "Race",
+      "question": "What is the person's apparent race?",
+      "classes": [
+        "east-asian",
+        "southeast-asian",
+        "indian",
+        "black",
+        "white",
+        "middle-eastern",
+        "latino-hispanic"
+      ],
+      "source": "fairface"
+    },
+    "tongue": {
+      "title": "Tongue out",
+      "question": "Is the person sticking their tongue out?",
+      "classes": [
+        "no",
+        "yes"
+      ],
+      "source": "teacher"
+    }
+  },
+  "rules": {
+    "direction": {
+      "title": "Face direction",
+      "classes": [
+        "center",
+        "up",
+        "down",
+        "left",
+        "right",
+        "up-left",
+        "up-right",
+        "down-left",
+        "down-right"
+      ]
+    },
+    "expressions": {
+      "title": "Expressions",
+      "classes": [
+        "wink-left",
+        "wink-right",
+        "eyes-closed",
+        "smile",
+        "mouth-open",
+        "kiss",
+        "cheek-puff",
+        "brows-raised",
+        "frown",
+        "mouth-sideways"
+      ]
+    }
+  }
+}

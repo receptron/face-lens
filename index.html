@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Face Lens</title>
+  </head>
+  <body>
+    <header class="bar">
+      <h1>Face Lens</h1>
+      <span id="status" class="status">Loading…</span>
+      <span class="spacer"></span>
+      <button id="calibrate" type="button" title="Look straight at the camera, then press">Set center</button>
+      <button id="toggle-capture" type="button">Capture</button>
+    </header>
+    <main class="layout">
+      <section class="stage">
+        <video id="video" playsinline muted></video>
+        <canvas id="overlay"></canvas>
+        <div id="start" class="start">
+          <button id="start-button" type="button">Start camera</button>
+          <p>Everything runs on this device. No image leaves the browser.</p>
+        </div>
+      </section>
+      <aside class="panel">
+        <div class="card">
+          <h2>Face direction</h2>
+          <div id="direction" class="direction"></div>
+          <p id="pose" class="muted"></p>
+        </div>
+        <div class="card">
+          <h2>Expressions</h2>
+          <div id="expressions" class="chips"></div>
+        </div>
+        <div id="learned" class="learned"></div>
+        <div id="capture" class="card capture" hidden>
+          <h2>Capture training clips</h2>
+          <p class="muted">Pick what you are doing, then hold the button. Crops are saved to <code>teacher/data/captures/</code>.</p>
+          <select id="capture-tag"></select>
+          <button id="capture-hold" type="button">Hold to record</button>
+          <p id="capture-count" class="muted">0 saved</p>
+        </div>
+      </aside>
+    </main>
+    <footer class="foot">
+      Predictions of gender, age, race and emotion come from appearance only, are often wrong, and can be biased across groups. For demonstration only.
+    </footer>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
