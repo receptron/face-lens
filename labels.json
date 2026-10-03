@@ -71,20 +71,6 @@
       ],
       "source": "teacher"
     },
-    "race": {
-      "title": "Race",
-      "question": "What is the person's apparent race?",
-      "classes": [
-        "east-asian",
-        "southeast-asian",
-        "indian",
-        "black",
-        "white",
-        "middle-eastern",
-        "latino-hispanic"
-      ],
-      "source": "fairface"
-    },
     "tongue": {
       "title": "Tongue out",
       "question": "Is the person sticking their tongue out?",

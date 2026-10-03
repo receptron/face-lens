@@ -29,8 +29,16 @@ from prepare import crop_face, make_landmarker  # noqa: E402
 
 DATA = Path(__file__).resolve().parent / "data"
 WEB = DATA / "web"
-UA = "face-lens-research/0.1 (satoshi.nakajima@gmail.com)"
+UA = "face-lens/0.1 (+https://github.com/receptron/face-lens)"
 YES, NO = 0.7, 0.15
+# Non-commercial and no-derivatives licenses are excluded: the trained model is published openly.
+ALLOWED_LICENSE = re.compile(r"^(cc[- ]by( |-sa|$)|cc[- ]?by-sa|cc0|cc-cc0|public domain|no restrictions|gfdl)", re.I)
+
+
+def license_ok(name):
+    name = (name or "").strip().lower()
+    return bool(name) and "nc" not in re.split(r"[- ]", name) and "nd" not in re.split(r"[- ]", name) \
+        and bool(ALLOWED_LICENSE.match(name))
 
 COMMONS_ROOT = "Category:People sticking out the tongue"
 COMMONS_SKIP = re.compile(r"topless|suggestive|in art|nude|naked|sexual", re.I)
@@ -198,6 +206,9 @@ def main():
     sources = (WEB / "sources.jsonl").open("w")
     teacher_web = (DATA / "teacher-web.jsonl").open("w")
     for key, c in cropped:
+        if not license_ok(c.get("license")):
+            kept["license"] = kept.get("license", 0) + 1
+            continue
         p_yes = verdicts[key]["tongue"][1]
         tag = "yes" if p_yes >= YES else "no" if p_yes <= NO else None
         if tag is None:

@@ -34,7 +34,7 @@ FF_RACE = ["east-asian", "indian", "black", "white", "middle-eastern", "latino-h
 
 def make_landmarker():
     options = vision.FaceLandmarkerOptions(
-        base_options=BaseOptions(model_asset_path=str(ROOT / "public/models/face_landmarker.task")),
+        base_options=BaseOptions(model_asset_path=str(ROOT / "teacher/models/face_landmarker.task")),
         num_faces=1,
     )
     return vision.FaceLandmarker.create_from_options(options)
@@ -107,11 +107,9 @@ def main():
                 stats["no_face"] += 1
                 continue
             crop.save(DATA / rel, quality=92)
-            labels = {
-                "gender": CLASSES["gender"].index(FF_GENDER[row["gender"]]),
-                "age": CLASSES["age"].index(FF_AGE[row["age"]]),
-                "race": CLASSES["race"].index(FF_RACE[row["race"]]),
-            }
+            ff = {"gender": FF_GENDER[row["gender"]], "age": FF_AGE[row["age"]], "race": FF_RACE[row["race"]]}
+            # Only heads that labels.json still defines (race is not one: EU AI Act).
+            labels = {k: CLASSES[k].index(v) for k, v in ff.items() if k in CLASSES}
             out.write(json.dumps({"path": rel, "split": "val" if split == "validation" else "train",
                                   "source": "fairface", "labels": labels}) + "\n")
             stats["kept"] += 1

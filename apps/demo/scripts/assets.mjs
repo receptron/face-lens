@@ -4,16 +4,17 @@ import { copyFileSync, existsSync, mkdirSync, readdirSync, writeFileSync } from 
 import { join } from "node:path";
 
 const root = new URL("..", import.meta.url).pathname;
+const modules = new URL("../../../node_modules/", import.meta.url).pathname;
 const pub = (p) => join(root, "public", p);
 
 mkdirSync(pub("mediapipe/wasm"), { recursive: true });
 mkdirSync(pub("ort"), { recursive: true });
 mkdirSync(pub("models"), { recursive: true });
 
-const mpWasm = join(root, "node_modules/@mediapipe/tasks-vision/wasm");
+const mpWasm = join(modules, "@mediapipe/tasks-vision/wasm");
 for (const f of readdirSync(mpWasm)) copyFileSync(join(mpWasm, f), pub(`mediapipe/wasm/${f}`));
 copyFileSync(
-  join(root, "node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded.asyncify.wasm"),
+  join(modules, "onnxruntime-web/dist/ort-wasm-simd-threaded.asyncify.wasm"),
   pub("ort/ort-wasm-simd-threaded.asyncify.wasm"),
 );
 

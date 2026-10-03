@@ -8,7 +8,7 @@ Heads with no target for a crop are masked out of the loss.
 
     python train/train.py --epochs 12
     python train/train.py --init train/runs/round1.pt --epochs 4   # fine-tune
-    python train/export.py            # → public/models/student.{onnx,json}
+    python train/export.py            # → apps/demo/public/models/student.{onnx,json}
 """
 
 import argparse
@@ -178,7 +178,10 @@ def main():
 
     model = Student(pretrained=not args.init)
     if args.init:
-        model.load_state_dict(torch.load(args.init, map_location="cpu"))
+        state = torch.load(args.init, map_location="cpu")
+        # Heads removed from labels.json since that checkpoint (e.g. race) are dropped.
+        state = {k: v for k, v in state.items() if not k.startswith("heads.") or k.split(".")[1] in HEADS}
+        model.load_state_dict(state)
     model = model.to(device)
     params = [
         {"params": model.backbone.parameters(), "lr": args.lr * 0.3},

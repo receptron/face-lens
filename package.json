@@ -1,21 +1,10 @@
 {
-  "name": "face-lens",
+  "name": "face-lens-monorepo",
   "private": true,
-  "version": "0.1.0",
   "type": "module",
+  "workspaces": ["packages/*", "apps/*"],
   "scripts": {
-    "dev": "vite",
-    "build": "tsc --noEmit && vite build",
-    "preview": "vite preview",
-    "postinstall": "node scripts/assets.mjs",
-    "assets": "node scripts/assets.mjs"
-  },
-  "devDependencies": {
-    "typescript": "^7.0.2",
-    "vite": "^8.3.2"
-  },
-  "dependencies": {
-    "@mediapipe/tasks-vision": "^1.0.1",
-    "onnxruntime-web": "^1.30.0"
+    "build": "npm run build -w @receptron/face-lens && npm run build -w apps/demo",
+    "dev": "npm run dev -w apps/demo"
   }
 }
