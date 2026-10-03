@@ -1,5 +1,8 @@
 import "./style.css";
-import { DIRECTIONS, EXPRESSIONS, FaceLens, drawCrop, type Direction, type FaceLensResult } from "@receptron/face-lens";
+import {
+  DIRECTIONS, EXPRESSIONS, FINGERS, FaceLens, drawCrop,
+  type Clothing, type Direction, type Face, type Hand, type Hands,
+} from "@receptron/face-lens";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const video = $<HTMLVideoElement>("video");
@@ -13,6 +16,10 @@ const ASSETS = {
   modelUrl: import.meta.env.VITE_MODEL_URL ?? local("./models/"),
   mediapipeWasm: local("./mediapipe/wasm"),
   faceLandmarker: local("./models/face_landmarker.task"),
+  handLandmarker: local("./models/hand_landmarker.task"),
+  segmenter: local("./models/selfie_multiclass_256x256.tflite"),
+  hands: true,
+  clothing: true,
   ortWasm: { wasm: local("./ort/ort-wasm-simd-threaded.asyncify.wasm") },
 };
 
@@ -69,7 +76,7 @@ function buildAttributeCards(heads: string[]) {
   }
 }
 
-function renderAttributes(r: FaceLensResult | null) {
+function renderAttributes(r: Face | null) {
   for (const [key, el] of bars) {
     const a = r?.attributes?.[key];
     if (!a) {
@@ -91,20 +98,52 @@ function renderAttributes(r: FaceLensResult | null) {
   tongueChip.style.setProperty("--level", tongue.toFixed(2));
 }
 
-function renderRules(r: FaceLensResult | null) {
+function renderRules(r: Face | null) {
   for (const [d, cell] of dirCells) cell.classList.toggle("on", d === r?.direction);
   $("pose").textContent = r ? `yaw ${r.pose.yaw.toFixed(0)}° · pitch ${r.pose.pitch.toFixed(0)}°` : "No face";
   for (const [name, chip] of chips) {
-    const s = r?.expressions[name as keyof FaceLensResult["expressions"]] ?? 0;
+    const s = r?.expressions[name as keyof Face["expressions"]] ?? 0;
     chip.classList.toggle("on", s > 0.5);
     chip.style.setProperty("--level", s.toFixed(2));
   }
 }
 
+const FINGER_GLYPH = ["T", "I", "M", "R", "P"]; // thumb, index, middle, ring, pinky
+function handHtml(label: string, h: Hand | null) {
+  const dots = FINGERS.map((f, i) => `<span class="finger${h?.up[f] ? " on" : ""}" title="${f}">${FINGER_GLYPH[i]}</span>`).join("");
+  return `<div class="hand"><span class="side">${label}</span><span class="count">${h ? h.count : "–"}</span>${dots}</div>`;
+}
+function renderHands(h: Hands | null) {
+  // Shown mirrored like the video: the user's left hand on the left.
+  $("hands").innerHTML = h
+    ? handHtml("L", h.left) + handHtml("R", h.right) + `<div class="total">total <b>${h.total}</b></div>`
+    : "";
+}
+
+let lastClothingKey = "";
+function renderClothing(c: Clothing | null) {
+  const key = JSON.stringify([
+    c?.colors.map((x) => [x.name, Math.round(x.share * 20)]),
+    c?.style?.label, c?.pattern?.label, Math.round((c?.style?.confidence ?? 0) * 10),
+  ]);
+  if (key === lastClothingKey) return;
+  lastClothingKey = key;
+  const swatches = c?.colors.length
+    ? c.colors
+        .map((x) => `<span class="swatch"><i style="background:rgb(${x.rgb.join(",")})"></i>${x.name} <small>${Math.round(x.share * 100)}%</small></span>`)
+        .join("")
+    : `<span class="muted">Colors: not visible</span>`;
+  const style = c?.style
+    ? `<div class="style"><b>${c.style.label}</b> <small>${Math.round(c.style.confidence * 100)}%</small>` +
+      (c.pattern ? ` · ${c.pattern.label} <small>${Math.round(c.pattern.confidence * 100)}%</small>` : "") + `</div>`
+    : "";
+  $("clothing").innerHTML = style + `<div class="swatches">${swatches}</div>`;
+}
+
 // --- Main loop -------------------------------------------------------------
 
 let lens: FaceLens | null = null;
-let last: FaceLensResult | null = null;
+let last: Face | null = null;
 
 async function start() {
   $("start-button").setAttribute("disabled", "");
@@ -127,9 +166,16 @@ async function start() {
   const tick = () => {
     const now = performance.now();
     if (video.readyState >= 2) {
-      last = lens!.detect(video, now);
+      const r = lens!.detect(video, now);
+      // For automated checks (test drivers often cannot see page globals, but can read the DOM).
+      if (import.meta.env.DEV) {
+        document.body.dataset.hands = JSON.stringify({ left: r.hands?.left?.count ?? null, right: r.hands?.right?.count ?? null });
+      }
+      last = r.face;
       renderRules(last);
       renderAttributes(last);
+      renderHands(r.hands);
+      renderClothing(r.clothing);
       drawOverlay();
       frames++;
       if (now - fpsStart > 1000) {

@@ -237,3 +237,76 @@ button:hover {
   color: var(--muted);
   font-size: 12px;
 }
+
+.hands {
+  display: grid;
+  gap: 6px;
+}
+.hand {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.hand .side {
+  width: 16px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.hand .count {
+  width: 22px;
+  font-size: 20px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.finger {
+  width: 20px;
+  height: 20px;
+  display: inline-grid;
+  place-content: center;
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--muted);
+  font-size: 11px;
+}
+.finger.on {
+  background: var(--warm);
+  color: #000;
+}
+.total {
+  color: var(--muted);
+  font-size: 13px;
+}
+.total b {
+  color: var(--text);
+  font-size: 16px;
+}
+.swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.swatch {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+}
+.swatch i {
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  border: 1px solid var(--line);
+}
+.swatch small {
+  color: var(--muted);
+}
+.clothing {
+  display: grid;
+  gap: 8px;
+}
+.clothing .style {
+  font-size: 14px;
+}
+.clothing small {
+  color: var(--muted);
+}

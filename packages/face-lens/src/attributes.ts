@@ -8,8 +8,11 @@ export interface ModelMeta {
   std: [number, number, number];
   /** Output name → class names, in logit order. */
   heads: Record<string, string[]>;
-  /** Square crop around the landmark box; the model was trained on exactly this crop. */
-  crop: { scale: number; shiftY: number };
+  /**
+   * The crop the model was trained on: for the face model `{ scale, shiftY }` around the
+   * landmark box; for the clothing model `{ scale, minVisible }` below the chin.
+   */
+  crop: Record<string, number>;
 }
 
 export interface Box {
@@ -27,7 +30,12 @@ export function sourceSize(src: FrameSource): [number, number] {
 }
 
 /** Square crop in source pixels around the landmark box. */
-export function cropBox(landmarks: NormalizedLandmark[], width: number, height: number, crop: ModelMeta["crop"]): Box {
+export function cropBox(
+  landmarks: NormalizedLandmark[],
+  width: number,
+  height: number,
+  crop: { scale: number; shiftY: number },
+): Box {
   let minX = 1, minY = 1, maxX = 0, maxY = 0;
   for (const p of landmarks) {
     minX = Math.min(minX, p.x);
@@ -41,6 +49,26 @@ export function cropBox(landmarks: NormalizedLandmark[], width: number, height: 
   const cx = ((minX + maxX) / 2) * width;
   const cy = ((minY + maxY) / 2) * height + h * crop.shiftY;
   return { x: cx - size / 2, y: cy - size / 2, size };
+}
+
+/**
+ * Square below the chin, side = scale × face height, centred on the face — the clothing model's
+ * crop. `visible` is the fraction of it inside the frame.
+ */
+export function clothingBox(landmarks: NormalizedLandmark[], width: number, height: number, scale: number) {
+  let minX = 1, maxX = 0, minY = 1, maxY = 0;
+  for (const p of landmarks) {
+    minX = Math.min(minX, p.x);
+    maxX = Math.max(maxX, p.x);
+    minY = Math.min(minY, p.y);
+    maxY = Math.max(maxY, p.y);
+  }
+  const size = (maxY - minY) * height * scale;
+  const x = ((minX + maxX) / 2) * width - size / 2;
+  const y = maxY * height;
+  const visW = Math.max(0, Math.min(width, x + size) - Math.max(0, x));
+  const visH = Math.max(0, Math.min(height, y + size) - Math.max(0, y));
+  return { box: { x, y, size } as Box, visible: (visW * visH) / (size * size || 1) };
 }
 
 /** Draws the crop at `out`×`out`; area outside the frame is black (as in training). */

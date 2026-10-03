@@ -111,5 +111,40 @@
         "mouth-sideways"
       ]
     }
+  },
+  "clothing": {
+    "crop": {
+      "note": "Square below the chin: side = scale × face landmark-box height, top at the chin, centred on the face. Shared by the browser, the teacher and training.",
+      "scale": 2.2,
+      "minVisible": 0.5,
+      "saveSize": 320
+    },
+    "heads": {
+      "style": {
+        "title": "Clothing",
+        "question": "What upper-body garment is the person wearing (the outermost layer)?",
+        "classes": [
+          "t-shirt",
+          "collared-shirt-blouse",
+          "sweater-knit",
+          "hoodie-sweatshirt",
+          "jacket-coat",
+          "suit-blazer",
+          "dress",
+          "sleeveless",
+          "other"
+        ]
+      },
+      "pattern": {
+        "title": "Pattern",
+        "question": "What is the pattern of that garment?",
+        "classes": [
+          "solid",
+          "striped",
+          "checked-plaid",
+          "printed-logo"
+        ]
+      }
+    }
   }
 }

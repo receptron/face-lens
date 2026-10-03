@@ -18,11 +18,17 @@ copyFileSync(
   pub("ort/ort-wasm-simd-threaded.asyncify.wasm"),
 );
 
-const model = pub("models/face_landmarker.task");
-if (!existsSync(model)) {
-  const url = "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task";
+const MP = "https://storage.googleapis.com/mediapipe-models";
+const models = {
+  "face_landmarker.task": `${MP}/face_landmarker/face_landmarker/float16/1/face_landmarker.task`,
+  "hand_landmarker.task": `${MP}/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task`,
+  "selfie_multiclass_256x256.tflite": `${MP}/image_segmenter/selfie_multiclass_256x256/float32/latest/selfie_multiclass_256x256.tflite`,
+};
+for (const [name, url] of Object.entries(models)) {
+  const dest = pub(`models/${name}`);
+  if (existsSync(dest)) continue;
   const res = await fetch(url);
   if (!res.ok) throw new Error(`${url}: ${res.status}`);
-  writeFileSync(model, Buffer.from(await res.arrayBuffer()));
+  writeFileSync(dest, Buffer.from(await res.arrayBuffer()));
 }
 console.log("public/ assets ready");

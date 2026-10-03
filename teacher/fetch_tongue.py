@@ -31,14 +31,17 @@ DATA = Path(__file__).resolve().parent / "data"
 WEB = DATA / "web"
 UA = "face-lens/0.1 (+https://github.com/receptron/face-lens)"
 YES, NO = 0.7, 0.15
-# Non-commercial and no-derivatives licenses are excluded: the trained model is published openly.
-ALLOWED_LICENSE = re.compile(r"^(cc[- ]by( |-sa|$)|cc[- ]?by-sa|cc0|cc-cc0|public domain|no restrictions|gfdl)", re.I)
-
-
+# Only permissive licenses (CC BY, CC0, public domain): the trained model is published under
+# CC BY 4.0, so no non-commercial, no-derivatives or share-alike (BY-SA, GFDL) sources.
 def license_ok(name):
-    name = (name or "").strip().lower()
-    return bool(name) and "nc" not in re.split(r"[- ]", name) and "nd" not in re.split(r"[- ]", name) \
-        and bool(ALLOWED_LICENSE.match(name))
+    words = re.split(r"[- ]+", (name or "").strip().lower())
+    if not words or words == [""]:
+        return False
+    if any(w in ("nc", "nd", "sa") for w in words) or words[0] == "gfdl":
+        return False
+    return words[:2] in (["cc", "by"], ["cc", "cc0"]) or words[0] == "cc0" \
+        or words[:2] in (["public", "domain"], ["no", "restrictions"])
+
 
 COMMONS_ROOT = "Category:People sticking out the tongue"
 COMMONS_SKIP = re.compile(r"topless|suggestive|in art|nude|naked|sexual", re.I)

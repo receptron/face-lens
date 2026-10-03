@@ -26,18 +26,20 @@ sys.path.insert(0, str(PACK / "runtime"))
 KEYS = [k for k, spec in LABELS["learned"].items() if spec.get("source") == "teacher"]
 
 
-def build_question() -> str:
+FACE_INTRO = "Look at the person's face in the image that follows and answer every question."
+
+
+def build_question(specs: dict, intro: str = FACE_INTRO) -> str:
     lines = [
-        "Look at the person's face in the image that follows and answer every question.",
+        intro,
         "Judge only from what is visible. When unsure, pick the closest option.",
         "",
     ]
-    for key in KEYS:
-        spec = LABELS["learned"][key]
+    for key, spec in specs.items():
         opts = ", ".join(f"{LETTERS[i]}) {c}" for i, c in enumerate(spec["classes"]))
         lines.append(f"{key}: {spec['question']} Options: {opts}")
     lines += ["", "Reply with one letter per line, in this exact format:"]
-    lines += [f"{key}: <letter>" for key in KEYS]
+    lines += [f"{key}: <letter>" for key in specs]
     return "\n".join(lines)
 
 
@@ -54,8 +56,11 @@ def copy_cache(cache):
 class Teacher:
     """The question text comes before the image, so its prefill is done once and reused."""
 
-    def __init__(self):
+    def __init__(self, specs: dict | None = None, intro: str = FACE_INTRO):
+        """specs: {key: {"question", "classes"}}; default = the face attributes the teacher labels."""
         from mlx_vlm.models import cache as cache_mod
+
+        self.specs = specs or {k: LABELS["learned"][k] for k in KEYS}
         from vision_artifact import load_vl_model
 
         self.cache_mod = cache_mod
@@ -66,7 +71,7 @@ class Teacher:
                 {
                     "role": "user",
                     "content": [
-                        {"type": "text", "text": build_question()},
+                        {"type": "text", "text": build_question(self.specs, intro)},
                         {"type": "image"},
                         {"type": "text", "text": "Answer now."},
                     ],
@@ -115,8 +120,8 @@ class Teacher:
 
         out: dict[str, list[float]] = {}
         prefix = ""
-        for key in KEYS:
-            n = len(LABELS["learned"][key]["classes"])
+        for key, spec in self.specs.items():
+            n = len(spec["classes"])
             logits = lm(self._ids(f"{prefix}{key}:"), cache=cache).logits[0, -1]
             probs = mx.softmax(logits[mx.array(self.letter_ids[:n])].astype(mx.float32)).tolist()
             out[key] = [round(v, 4) for v in probs]
