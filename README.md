@@ -38,6 +38,9 @@ huggingface-cli download HuggingFaceM4/FairFace --repo-type dataset --include "1
 - `teacher/bonsai.py` — the teacher: one prefill per image (question prefix cached), answer
   distributions read from logits, no free text (~2.5 s/image on an M2 Max)
 - `teacher/label.py` — resumable labeling into `data/teacher.jsonl`
+- `teacher/fetch_tongue.py` — openly licensed tongue-out photos from Wikimedia Commons and Openverse,
+  cropped and checked by Bonsai into `captures/tongue={yes,no}/`; sources and licenses in
+  `data/web/sources.jsonl` (some are CC BY-NC: keep this non-commercial)
 - `train/train.py`, `train/export.py` — student training (PyTorch MPS) and ONNX export
 
 ### Your own clips

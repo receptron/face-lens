@@ -38,8 +38,8 @@ STD = (0.229, 0.224, 0.225)
 
 def load_rows():
     teacher = {}
-    path = DATA / "teacher.jsonl"
-    if path.exists():
+    # teacher.jsonl from label.py, teacher-web.jsonl from fetch_tongue.py
+    for path in sorted(DATA.glob("teacher*.jsonl")):
         for line in path.read_text().splitlines():
             if line:
                 r = json.loads(line)
