@@ -374,16 +374,23 @@ async function loadModel(opts: FaceLensOptions, name: string, required: boolean)
   let lastError: unknown;
   for (const ep of providers) {
     try {
-      const session = await ort.InferenceSession.create(`${base}${name}.onnx`, {
-        executionProviders: [ep],
-        graphOptimizationLevel: "all",
-      });
+      const session = await serialized(() =>
+        ort.InferenceSession.create(`${base}${name}.onnx`, { executionProviders: [ep], graphOptimizationLevel: "all" }),
+      );
       return { model: new AttributeModel(ort, session, meta, ep, heads), backend: ep };
     } catch (e) {
       lastError = e;
     }
   }
   throw lastError;
+}
+
+// Creating two WebGPU sessions at once makes one of them fall back to WASM; queue them.
+let sessionQueue: Promise<unknown> = Promise.resolve();
+function serialized<T>(make: () => Promise<T>): Promise<T> {
+  const next = sessionQueue.then(make, make);
+  sessionQueue = next.catch(() => undefined);
+  return next;
 }
 
 function withSlash(url: string) {

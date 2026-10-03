@@ -84,6 +84,14 @@ export function drawCrop(src: FrameSource, box: Box, canvas: OffscreenCanvas, ou
   return ctx;
 }
 
+// onnxruntime-web stalls when two WebGPU sessions run at the same time, so every run is queued.
+let runQueue: Promise<unknown> = Promise.resolve();
+function serialRun<T>(run: () => Promise<T>): Promise<T> {
+  const next = runQueue.then(run, run);
+  runQueue = next.catch(() => undefined);
+  return next;
+}
+
 export type AttributeProbs = Record<string, Record<string, number>>;
 
 export class AttributeModel {
@@ -112,10 +120,8 @@ export class AttributeModel {
         input[n * n + i] = (data[p + 1] / 255 - mean[1]) / std[1];
         input[2 * n * n + i] = (data[p + 2] / 255 - mean[2]) / std[2];
       }
-      const out = await this.session.run(
-        { input: new this.ort.Tensor("float32", input, [1, 3, n, n]) },
-        this.heads,
-      );
+      const feeds = { input: new this.ort.Tensor("float32", input, [1, 3, n, n]) };
+      const out = await serialRun(() => this.session.run(feeds, this.heads));
       const probs: AttributeProbs = {};
       for (const key of this.heads) {
         const p = softmax(out[key].data as Float32Array);
