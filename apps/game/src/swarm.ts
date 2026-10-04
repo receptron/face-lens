@@ -49,7 +49,10 @@ export class Swarm {
   /** Strike drones that crashed before reaching their target (for tuning). */
   strikeCrashes = 0;
 
-  constructor(start: THREE.Vector3, headingDeg: number) {
+  /** When set (rail mode), the leader is placed here each frame instead of flying `heading`. */
+  private driven: { pos: THREE.Vector3; vel: THREE.Vector3 } | null = null;
+
+  constructor(start: THREE.Vector3, headingDeg: number, initial = COUNT) {
     this.setHeading(headingDeg, 0);
     this.mesh = new THREE.InstancedMesh(
       droneGeometry(),
@@ -66,7 +69,7 @@ export class Swarm {
       this.drones.push({
         pos: start.clone().add(offset).addScaledVector(this.heading, i === 0 ? 0 : -30),
         vel: this.heading.clone().multiplyScalar(80),
-        alive: true,
+        alive: i < initial,
         strike: null,
         onHit: null,
         phase: [Math.random() * 100, Math.random() * 100, Math.random() * 100],
@@ -93,10 +96,47 @@ export class Swarm {
     this.heading.set(Math.sin(y) * Math.cos(p), Math.sin(p), -Math.cos(y) * Math.cos(p)).normalize();
   }
 
+  /** Rail mode: the leader is placed by the caller every frame. */
+  drive(pos: THREE.Vector3, vel: THREE.Vector3) {
+    this.driven = { pos: pos.clone(), vel: vel.clone() };
+    this.heading.copy(vel).normalize();
+  }
+
+  /** Brings one lost drone back, just behind the leader. False when the flock is full. */
+  revive(): boolean {
+    const d = this.drones.find((x) => !x.alive);
+    if (!d) return false;
+    const leader = this.drones[this.leaderIndex];
+    d.alive = true;
+    d.strike = null;
+    d.pos.copy(leader.pos).addScaledVector(this.heading, -40).add(new THREE.Vector3().randomDirection().multiplyScalar(8));
+    d.vel.copy(leader.vel);
+    return true;
+  }
+
+  /** Destroys the `n` followers nearest to `at` (a missed note hitting the flock). */
+  lose(n: number, at: THREE.Vector3): THREE.Vector3[] {
+    const victims = this.drones
+      .filter((d, i) => d.alive && !d.strike && i !== this.leaderIndex)
+      .sort((a, b) => a.pos.distanceToSquared(at) - b.pos.distanceToSquared(at))
+      .slice(0, n);
+    for (const d of victims) d.alive = false;
+    if (victims.length < n) {
+      // Nobody left to shield it: the leader goes down.
+      const leader = this.drones[this.leaderIndex];
+      if (leader.alive) {
+        leader.alive = false;
+        victims.push(leader);
+        this.promote();
+      }
+    }
+    return victims.map((d) => d.pos.clone());
+  }
+
   /** Puts the leader (and the flock around it) at `p`, e.g. when a round starts. */
-  reset(p: THREE.Vector3) {
+  reset(p: THREE.Vector3, initial = COUNT) {
     for (const [i, d] of this.drones.entries()) {
-      d.alive = true;
+      d.alive = i < initial || i === this.leaderIndex;
       d.strike = null;
       d.onHit = null;
       const offset = i === this.leaderIndex ? new THREE.Vector3() : new THREE.Vector3().randomDirection().multiplyScalar(15 + Math.random() * 35);
@@ -129,9 +169,14 @@ export class Swarm {
   update(dt: number, t: number, speed: number, collides: (p: THREE.Vector3) => boolean, floorAt: (p: THREE.Vector3) => number) {
     const deaths: THREE.Vector3[] = [];
     const leader = this.drones[this.leaderIndex];
-    // The leader flies exactly where the player points it.
-    leader.vel.copy(this.heading).multiplyScalar(speed);
-    leader.pos.addScaledVector(leader.vel, dt);
+    if (this.driven) {
+      leader.pos.copy(this.driven.pos);
+      leader.vel.copy(this.driven.vel);
+    } else {
+      // The leader flies exactly where the player points it.
+      leader.vel.copy(this.heading).multiplyScalar(speed);
+      leader.pos.addScaledVector(leader.vel, dt);
+    }
 
     const flock = this.drones.filter((d) => d.alive && !d.strike);
     for (const d of this.drones) {

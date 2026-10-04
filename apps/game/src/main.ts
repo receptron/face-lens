@@ -5,15 +5,23 @@ import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
 import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
 import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
 import { Bridge } from "./bridge";
-import { FaceControl, KeyboardControl, merge, type Input } from "./control";
+import { FaceControl, KeyboardControl, type Input } from "./control";
+import { ALTITUDE, Course } from "./course";
+import { chart, GOOD, grade, rank, type Note, type Song } from "./rhythm";
 import { Swarm } from "./swarm";
-import { Explosions, Targets } from "./targets";
+import { Explosions } from "./targets";
 import { Terrain } from "./terrain";
 import { buildWorld } from "./world";
 
 const BASE = import.meta.env.BASE_URL;
-const ROUND_SECONDS = 150;
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
+const START_DRONES = 24;
+const COMBO_FOR_DRONE = 8; // every 8 hits in a row brings back one drone
+const MISS_COST = 2; // drones lost when a missed orb hits the flock
+const COUNTDOWN = 3; // seconds before the song starts
+/** Camera + hand tracking reach us late; finger changes are dated this much earlier. */
+const CAMERA_LAG = 0.12;
+const COUNT_COLORS = ["", "#5ae0ff", "#ffd23f", "#ff5ad1", "#6dff8b", "#ff8a3d"];
 
 // --- Renderer and scene ---------------------------------------------------
 
@@ -26,17 +34,14 @@ const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(62, 1, 1, 45000);
 const composer = new EffectComposer(renderer);
 composer.addPass(new RenderPass(scene, camera));
-// High threshold: only things drawn far brighter than white (orbs, strike drones) glow —
-// not the sunlit bridge, the hills or the water's glints.
-const bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.9, 0.5, 1.6);
-composer.addPass(bloom);
+// High threshold: only things drawn far brighter than white (orbs, explosions) glow.
+composer.addPass(new UnrealBloomPass(new THREE.Vector2(1, 1), 0.9, 0.5, 1.6));
 composer.addPass(new OutputPass());
 
 function resize() {
-  const w = innerWidth, h = innerHeight;
-  renderer.setSize(w, h, false);
-  composer.setSize(w, h);
-  camera.aspect = w / h;
+  renderer.setSize(innerWidth, innerHeight, false);
+  composer.setSize(innerWidth, innerHeight);
+  camera.aspect = innerWidth / innerHeight;
   camera.updateProjectionMatrix();
 }
 addEventListener("resize", resize);
@@ -45,77 +50,118 @@ resize();
 const world = buildWorld(scene, renderer);
 const bridge = new Bridge();
 scene.add(bridge.group);
+const course = new Course();
+scene.add(course.laneMarkers());
 const explosions = new Explosions();
 scene.add(explosions.points);
 
+// --- Note orbs ------------------------------------------------------------
+
+/** Big white digits with a dark outline, one texture per count. */
+const LABELS: THREE.Texture[] = [];
+for (let n = 0; n <= 5; n++) {
+  const c = document.createElement("canvas");
+  c.width = c.height = 128;
+  const g = c.getContext("2d")!;
+  g.font = "bold 104px system-ui, sans-serif";
+  g.textAlign = "center";
+  g.textBaseline = "middle";
+  g.lineWidth = 12;
+  g.strokeStyle = "rgba(0,0,0,0.75)";
+  g.strokeText(String(n), 64, 70);
+  g.fillStyle = "#fff";
+  g.fillText(String(n), 64, 70);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  LABELS.push(t);
+}
+
+/** A glowing orb with its finger count on a sprite, reused from a pool. */
+class NoteOrb {
+  readonly group = new THREE.Group();
+  private orb: THREE.Mesh;
+  private label: THREE.Sprite;
+
+  constructor() {
+    this.orb = new THREE.Mesh(new THREE.IcosahedronGeometry(7, 2), new THREE.MeshBasicMaterial({ toneMapped: false }));
+    this.label = new THREE.Sprite(new THREE.SpriteMaterial({ depthTest: false, transparent: true }));
+    this.label.scale.setScalar(16);
+    this.label.position.y = 15;
+    this.group.add(this.orb, this.label);
+    this.group.visible = false;
+  }
+
+  show(count: number, pos: THREE.Vector3, pulse: number) {
+    (this.orb.material as THREE.MeshBasicMaterial).color.set(COUNT_COLORS[count]).multiplyScalar(4);
+    (this.label.material as THREE.SpriteMaterial).map = LABELS[count];
+    this.group.position.copy(pos);
+    this.orb.scale.setScalar(1 + 0.18 * pulse);
+    this.group.visible = true;
+  }
+}
+
+const orbs = Array.from({ length: 48 }, () => new NoteOrb());
+for (const o of orbs) scene.add(o.group);
+
 // --- Game state -----------------------------------------------------------
 
-// West of the bridge, on a line down the middle of the strait (all water to the main span).
-const START = new THREE.Vector3(-3400, 140, 400);
 let terrain: Terrain;
 let swarm: Swarm;
-let targets: Targets;
-let yaw = 90; // compass degrees: start heading east, toward the bridge
-let pitch = 0;
+let songs: Song[] = [];
+let song: Song | null = null;
+let notes: Note[] = [];
+let speed = 120;
+let audio: AudioContext | null = null;
+let source: AudioBufferSourceNode | null = null;
+let startAt = 0;
+let state: "menu" | "playing" | "done" = "menu";
+let face: FaceControl | null = null;
+let useCamera = true;
+const keys = new KeyboardControl();
+
+let lanePos = 0;
+let keyLane = 0;
+let shown = 0;
+let changedAt = -99;
 let score = 0;
 let combo = 0;
-let comboTimer = 0;
-let timeLeft = ROUND_SECONDS;
-let running = false;
-let wasUnder = false;
-let bridgeHitCount = 0;
-let hitCount = 0;
-let face: FaceControl | null = null;
-const keys = new KeyboardControl();
-const lockRing = new THREE.Mesh(
-  new THREE.TorusGeometry(26, 1.2, 8, 48),
-  new THREE.MeshBasicMaterial({ color: "#ffffff", toneMapped: false, transparent: true, opacity: 0.85 }),
-);
-scene.add(lockRing);
+let maxCombo = 0;
+let tally = { perfect: 0, good: 0, miss: 0 };
+let shake = 0;
+const buffers = new Map<string, AudioBuffer>();
+
+function songTime() {
+  return audio ? audio.currentTime - startAt : -COUNTDOWN;
+}
 
 function collides(p: THREE.Vector3) {
   return p.y < Math.max(0, terrain.heightAt(p.x, p.z)) + 0.5 || bridge.hits(p);
 }
 
-/**
- * Random spot for an orb, 60–260 m up over water or low hills: a third of them along the
- * strait and around the bridge (where every run starts), the rest within ~7 km of the bay.
- */
-function placeOrb() {
-  const b = terrain.bounds();
-  for (let tries = 0; tries < 50; tries++) {
-    const nearBridge = Math.random() < 0.35;
-    const r = 7000 * Math.sqrt(Math.random());
-    const a = Math.random() * Math.PI * 2;
-    const x = nearBridge
-      ? THREE.MathUtils.lerp(-3600, 1800, Math.random())
-      : THREE.MathUtils.clamp(Math.cos(a) * r + 2500, b.minX + 1500, b.maxX - 1500);
-    const z = nearBridge
-      ? THREE.MathUtils.lerp(-500, 1300, Math.random())
-      : THREE.MathUtils.clamp(Math.sin(a) * r * 0.7 - 1000, b.minZ + 1500, b.maxZ - 1500);
-    const ground = Math.max(0, terrain.heightAt(x, z));
-    if (ground < 120) return new THREE.Vector3(x, ground + 60 + Math.random() * 200, z);
-  }
-  return new THREE.Vector3(0, 150, -2000);
-}
-
 // --- HUD ------------------------------------------------------------------
 
-let bannerTimer = 0;
-function banner(text: string, seconds = 1.6) {
-  $("banner").textContent = text;
-  $("banner").classList.add("show");
-  bannerTimer = seconds;
+function flash(id: string, text: string, cls = "") {
+  const el = $(id);
+  el.textContent = text;
+  el.className = `pop ${cls}`;
+  void el.offsetWidth; // restart the CSS animation
+  el.classList.add("show");
 }
 
-function hud() {
+function hud(t: number) {
   $("score").textContent = score.toLocaleString();
   $("drones").textContent = String(swarm.count);
-  $("time").textContent = `${Math.floor(timeLeft / 60)}:${String(Math.floor(timeLeft % 60)).padStart(2, "0")}`;
-  $("combo").textContent = combo > 1 ? `×${combo}` : "";
+  $("combo").textContent = combo >= 2 ? `${combo} combo` : "";
+  $("progress").style.width = song ? `${Math.max(0, Math.min(100, (t / song.duration) * 100))}%` : "0";
+  for (const [i, el] of [...document.querySelectorAll<HTMLElement>(".lane")].entries()) {
+    el.classList.toggle("on", Math.round(lanePos) === i - 1);
+  }
+  $("shown").textContent = shown ? String(shown) : "–";
+  $("shown").style.color = COUNT_COLORS[shown] || "";
   if (import.meta.env.DEV) {
     document.body.dataset.state = JSON.stringify({
-      score, drones: swarm.count, under: wasUnder, bridgeHits: bridgeHitCount, hits: hitCount, strikeCrashes: swarm.strikeCrashes, ahead: Math.round(swarm.maxAhead()), lateral: Math.round(swarm.offset().lateral), behind: Math.round(swarm.offset().behind), x: Math.round(swarm.leader.x), y: Math.round(swarm.leader.y), z: Math.round(swarm.leader.z), yaw: Math.round(yaw),
+      state, t: Math.round(t * 10) / 10, score, combo, drones: swarm.count, ...tally, lane: Math.round(lanePos * 10) / 10, shown,
+      next: notes.filter((n) => !n.judged).slice(0, 3).map((n) => ({ t: Math.round(n.time * 100) / 100, lane: n.lane, count: n.count })),
     });
   }
 }
@@ -124,159 +170,226 @@ function hud() {
 
 const camPos = new THREE.Vector3();
 const camLook = new THREE.Vector3();
-const centroid = new THREE.Vector3();
 let last = performance.now();
 
 function frame(now: number) {
   const dt = Math.min(0.05, (now - last) / 1000);
   last = now;
-  const t = now / 1000;
-  world.update(t);
-
-  if (running) step(dt, t, now);
+  world.update(now / 1000);
+  const t = state === "playing" ? songTime() : -COUNTDOWN;
+  if (state === "playing") step(dt, t, now);
   explosions.update(dt);
-  targets?.update(dt, t);
 
-  // Chase camera behind and above the leader, nudged toward the flock so it stays in view.
-  swarm.centroid(centroid);
-  const focus = swarm.leader.clone().lerp(centroid, 0.35);
-  const want = focus.clone().addScaledVector(swarm.heading, -95).add(new THREE.Vector3(0, 30, 0));
-  const k = 1 - Math.exp(-dt * 3);
-  camPos.lerp(want, k);
-  camLook.lerp(focus.clone().addScaledVector(swarm.heading, 90), k);
+  // Camera behind the flock on the centre line, so the lanes stay put and the flock moves.
+  const s = speed * t;
+  const k = 1 - Math.exp(-dt * 4);
+  camPos.lerp(course.at(s - 115, 0).add(new THREE.Vector3(0, 34, 0)), k);
+  camLook.lerp(course.at(s + 140, 0).setY(ALTITUDE - 6), k);
   camera.position.copy(camPos);
+  if (shake > 0) {
+    camera.position.add(new THREE.Vector3().randomDirection().multiplyScalar(shake * 6));
+    shake = Math.max(0, shake - dt * 2);
+  }
   camera.lookAt(camLook);
-  lockRing.lookAt(camera.position);
-
-  if (bannerTimer > 0 && (bannerTimer -= dt) <= 0) $("banner").classList.remove("show");
   composer.render();
   requestAnimationFrame(frame);
 }
 
 function step(dt: number, t: number, now: number) {
-  const input: Input = face ? merge(face.read(now), keys.read()) : keys.read();
+  const input: Input = face ? face.read(now) : keys.read();
+  const kb = face ? keys.read() : input;
+  if (kb.laneStep) keyLane = Math.max(-1, Math.min(1, keyLane + kb.laneStep));
+  const target = input.lane ?? keyLane;
+  lanePos += (target - lanePos) * Math.min(1, dt * 8);
   $("face-warning").hidden = !face || input.faceVisible;
-  const fg = input.fingers;
-  $("fingers").textContent = fg.left === null && fg.right === null ? "" : `L ${fg.left ?? "–"} · R ${fg.right ?? "–"}`;
+  const h = input.hands;
+  $("fingers").textContent = h.left === null && h.right === null ? "" : `L ${h.left ?? "–"} · R ${h.right ?? "–"}`;
 
-  // Steering: head turn sets the turn rate, nod sets the climb angle.
-  yaw = (yaw + input.turn * 58 * dt + 360) % 360;
-  pitch += (input.climb * 28 - pitch) * Math.min(1, dt * 3);
-  // Keep clear of the ground and the water; stay inside the map.
-  const ground = Math.max(0, terrain.heightAt(swarm.leader.x, swarm.leader.z));
-  const ahead = swarm.leader.clone().addScaledVector(swarm.heading, 250);
-  const groundAhead = Math.max(0, terrain.heightAt(ahead.x, ahead.z));
-  const floor = Math.max(ground, groundAhead) + 35;
-  if (swarm.leader.y < floor) pitch = Math.max(pitch, Math.min(35, (floor - swarm.leader.y) * 0.8));
-  if (swarm.leader.y > 750) pitch = Math.min(pitch, -5);
-  const b = terrain.bounds();
-  const m = 1200;
-  if (swarm.leader.x < b.minX + m || swarm.leader.x > b.maxX - m || swarm.leader.z < b.minZ + m || swarm.leader.z > b.maxZ - m) {
-    // Compass bearing from the leader back to the map centre (the bridge): turn toward it.
-    const back = ((Math.atan2(-swarm.leader.x, swarm.leader.z) * 180) / Math.PI + 360) % 360;
-    yaw += THREE.MathUtils.clamp(((back - yaw + 540) % 360) - 180, -60 * dt, 60 * dt);
-  }
-  swarm.setHeading(yaw, pitch);
-  const speed = input.boost ? 140 : 80;
-
-  // Strikes: one finger on the left hand → target on the left, right hand → on the right.
-  const lockTarget = targets.pick(swarm.leader, swarm.heading, 950, 0);
-  lockRing.visible = !!lockTarget;
-  if (lockTarget) lockRing.position.copy(lockTarget.mesh.position);
-  for (const [fired, side] of [[input.strikeLeft, -1], [input.strikeRight, 1]] as const) {
-    if (!fired) continue;
-    const orb = targets.pick(swarm.leader, swarm.heading, 950, side) ?? lockTarget;
-    if (!orb) {
-      banner("No target in range");
-      continue;
-    }
-    const color = (orb.mesh.material as THREE.MeshBasicMaterial).color.clone();
-    // One drone per strike, and it does not come back.
-    const sent = swarm.strike(orb.mesh.position.clone(), () => {
-      targets.destroy(orb);
-      hitCount++;
-      explosions.burst(orb.mesh.position, color, 260, 90);
-      // Quick successive hits build a combo, capped so steady firing does not run away.
-      combo = comboTimer > 0 ? Math.min(5, combo + 1) : 1;
-      comboTimer = 4;
-      score += 100 * combo;
-      banner(combo > 1 ? `Hit! combo ×${combo}` : "Hit!");
-    });
-    if (sent) targets.claim(orb);
-    else banner("No drones left to send");
+  // Finger count: remember when it last changed (dated back by the camera's delay).
+  const nowShown = face ? input.fingers || kb.fingers : input.fingers;
+  if (nowShown !== shown) {
+    shown = nowShown;
+    changedAt = t - (face ? CAMERA_LAG : 0);
   }
 
-  const deaths = swarm.update(dt, t, speed, collides, (p) => Math.max(0, terrain.heightAt(p.x, p.z)));
-  for (const p of deaths) explosions.burst(p, new THREE.Color("#ffb347"), 40, 35);
+  // Fly the rail: the leader rides its lane; the flock follows as boids.
+  const s = speed * t;
+  const pos = course.at(s, lanePos);
+  const f = course.frame(s);
+  swarm.drive(pos, f.tangent.clone().multiplyScalar(speed));
+  const deaths = swarm.update(dt, now / 1000, speed, collides, (p) => Math.max(0, terrain.heightAt(p.x, p.z)));
+  for (const p of deaths) explosions.burst(p, new THREE.Color("#ffb347"), 30, 30);
 
-  // Bonus for flying under the main span.
-  swarm.centroid(centroid);
-  const under = bridge.underMainSpan(centroid);
-  if (under && !wasUnder) {
-    bridgeHitCount++;
-    score += 500;
-    banner("Under the Golden Gate! +500", 2.2);
+  // Notes: show the ones ahead; judge the ones we are passing.
+  const beat = song ? 60 / song.bpm : 0.5;
+  const phase = ((((t - (song?.offset ?? 0)) % beat) + beat) % beat) / beat;
+  const pulse = Math.max(0, 1 - phase / 0.35);
+  let o = 0;
+  for (const n of notes) {
+    if (n.time > t + 4.5) break;
+    if (n.judged) continue;
+    if (o < orbs.length) orbs[o++].show(n.count, course.at(speed * n.time, n.lane).setY(ALTITUDE + 2), pulse);
+    judgeNote(n, t);
   }
-  wasUnder = under;
+  for (; o < orbs.length; o++) orbs[o].group.visible = false;
 
-  if ((comboTimer -= dt) <= 0) combo = 0;
-  timeLeft -= dt;
-  hud();
-  if (timeLeft <= 0 || swarm.wiped) end();
+  hud(t);
+  if (song && t > song.duration) finish(false);
+  else if (swarm.wiped || swarm.count === 0) finish(true);
 }
 
-function end() {
-  running = false;
-  $("final-score").textContent = score.toLocaleString();
-  $("end").hidden = false;
+function judgeNote(n: Note, t: number) {
+  if (t < n.time - GOOD) return;
+  const laneOk = Math.abs(lanePos - n.lane) < 0.5;
+  const right = laneOk && shown === n.count;
+  const at = course.at(speed * n.time, n.lane).setY(ALTITUDE + 2);
+  if (right && (changedAt >= n.time - GOOD || t >= n.time)) {
+    // Changed onto the right count within the window (Perfect/Good), or held it into the beat (Good).
+    const j = changedAt >= n.time - GOOD ? grade(n, changedAt) : "good";
+    n.judged = true;
+    n.result = j;
+    tally[j]++;
+    combo++;
+    maxCombo = Math.max(maxCombo, combo);
+    const mult = 1 + Math.min(3, Math.floor(combo / 10) * 0.5);
+    score += Math.round((j === "perfect" ? 300 : 120) * mult);
+    explosions.burst(at, new THREE.Color(COUNT_COLORS[n.count]).multiplyScalar(3), 160, 70);
+    flash("judgement", j === "perfect" ? "PERFECT" : "GOOD", j);
+    if (combo % COMBO_FOR_DRONE === 0 && swarm.revive()) flash("bonus", "+1 drone");
+  } else if (t > n.time + GOOD) {
+    n.judged = true;
+    n.result = "miss";
+    tally.miss++;
+    combo = 0;
+    for (const p of swarm.lose(MISS_COST, at)) explosions.burst(p, new THREE.Color("#ff6a3d").multiplyScalar(2), 60, 45);
+    shake = 0.6;
+    flash("judgement", "MISS", "miss");
+  }
 }
 
-async function start(useFace: boolean) {
-  $("intro").hidden = true;
+// --- Flow -----------------------------------------------------------------
+
+async function loadBuffer(s: Song) {
+  if (!buffers.has(s.id)) {
+    const data = await (await fetch(`${BASE}music/${s.file}`)).arrayBuffer();
+    buffers.set(s.id, await audio!.decodeAudioData(data));
+  }
+  return buffers.get(s.id)!;
+}
+
+async function play(s: Song) {
+  $("menu").hidden = true;
+  $("results").hidden = true;
   $("loading").hidden = false;
+  $("loading").textContent = "Loading…";
+  audio ??= new AudioContext();
+  await audio.resume();
   try {
-    if (useFace && !face) face = await FaceControl.create($<HTMLVideoElement>("cam"));
+    if (useCamera && !face) face = await FaceControl.create($<HTMLVideoElement>("cam"));
   } catch (e) {
     console.error(e);
-    banner("Camera unavailable — keyboard mode", 3);
+    useCamera = false;
     face = null;
   }
+  if (!useCamera) face = null;
+  const buffer = await loadBuffer(s);
   $("loading").hidden = true;
   $("cam-wrap").hidden = !face;
-  score = 0;
-  combo = 0;
-  timeLeft = ROUND_SECONDS;
-  yaw = 90;
-  pitch = 0;
-  swarm.setHeading(yaw, pitch);
-  swarm.reset(START);
-  running = true;
-  if (face) setTimeout(() => face?.calibrate(), 600);
-  banner(face ? "Turn your head to steer · show one finger to strike" : "Arrows to steer · Q / E to strike", 3);
+  song = s;
+  notes = chart(s);
+  speed = course.length / s.duration;
+  score = combo = maxCombo = 0;
+  tally = { perfect: 0, good: 0, miss: 0 };
+  lanePos = keyLane = 0;
+  shown = 0;
+  changedAt = -99;
+  const start = course.at(-COUNTDOWN * speed, 0);
+  swarm.drive(start, course.frame(-COUNTDOWN * speed).tangent.multiplyScalar(speed));
+  swarm.reset(start, START_DRONES);
+  $("credit").textContent = `♪ ${s.title} — ${s.creator} (${s.license})`;
+  face?.calibrate();
+  source?.stop();
+  source = audio.createBufferSource();
+  source.buffer = buffer;
+  source.connect(audio.destination);
+  startAt = audio.currentTime + COUNTDOWN;
+  source.start(startAt);
+  state = "playing";
+  for (let i = COUNTDOWN; i > 0; i--) setTimeout(() => flash("judgement", String(i), "count"), (COUNTDOWN - i) * 1000);
+  setTimeout(() => flash("judgement", "GO!", "count"), COUNTDOWN * 1000);
+}
+
+function finish(failed: boolean) {
+  state = "done";
+  source?.stop();
+  source = null;
+  for (const o of orbs) o.group.visible = false;
+  const total = notes.length || 1;
+  const accuracy = (tally.perfect + tally.good * 0.6) / total;
+  const key = `swarm-strike:best:${song!.id}`;
+  let best = 0;
+  try {
+    best = Number(localStorage.getItem(key) ?? 0);
+    if (!failed && score > best) localStorage.setItem(key, String(score));
+  } catch {
+    /* storage unavailable: no best score */
+  }
+  $("rank").textContent = failed ? "✕" : rank(accuracy);
+  $("result-title").textContent = failed ? "Swarm lost" : "Run complete";
+  $("final-score").textContent = score.toLocaleString();
+  $("result-detail").textContent =
+    `${tally.perfect} perfect · ${tally.good} good · ${tally.miss} miss · max combo ${maxCombo} · accuracy ${Math.round(accuracy * 100)}%`;
+  $("result-best").textContent = !failed && score > best ? "New best!" : `Best ${best.toLocaleString()}`;
+  $("results").hidden = false;
+  renderMenu();
+}
+
+function renderMenu() {
+  const list = $("songs");
+  list.innerHTML = "";
+  for (const s of songs) {
+    let best = 0;
+    try {
+      best = Number(localStorage.getItem(`swarm-strike:best:${s.id}`) ?? 0);
+    } catch {
+      /* ignore */
+    }
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "song";
+    const len = `${Math.floor(s.duration / 60)}:${String(Math.round(s.duration % 60)).padStart(2, "0")}`;
+    b.innerHTML = `<b>${s.title}</b><span>${s.level} · ${Math.round(s.bpm)} BPM · ${len}${best ? ` · best ${best.toLocaleString()}` : ""}</span>`;
+    b.addEventListener("click", () => void play(s));
+    list.append(b);
+  }
 }
 
 async function init() {
   terrain = await Terrain.load(BASE);
   scene.add(terrain.mesh);
+  songs = await (await fetch(`${BASE}music/songs.json`)).json();
   $("attribution").textContent = terrain.attribution;
-  swarm = new Swarm(START, 90);
+  const start = course.at(-COUNTDOWN * 120, 0);
+  swarm = new Swarm(start, 90, START_DRONES);
+  swarm.drive(start, course.frame(0).tangent.multiplyScalar(120));
   scene.add(swarm.mesh, swarm.lights);
-  targets = new Targets(60, placeOrb);
-  scene.add(targets.group);
-  swarm.centroid(centroid);
-  camPos.copy(centroid).add(new THREE.Vector3(-95, 30, 0));
-  camLook.copy(centroid);
-  hud();
+  camPos.copy(course.at(-COUNTDOWN * 120 - 115, 0)).add(new THREE.Vector3(0, 34, 0));
+  camLook.copy(course.at(0, 0));
+  renderMenu();
   $("loading").hidden = true;
-  $("intro").hidden = false;
+  $("menu").hidden = false;
   requestAnimationFrame(frame);
 }
 
-$("play-face").addEventListener("click", () => start(true));
-$("play-keys").addEventListener("click", () => start(false));
-$("again").addEventListener("click", () => {
-  $("end").hidden = true;
-  void start(!!face);
+for (const el of document.querySelectorAll<HTMLInputElement>("input[name=mode]")) {
+  el.addEventListener("change", () => {
+    useCamera = el.value === "camera";
+  });
+}
+$("again").addEventListener("click", () => song && void play(song));
+$("to-menu").addEventListener("click", () => {
+  $("results").hidden = true;
+  $("menu").hidden = false;
 });
 addEventListener("keydown", (e) => {
   if (e.code === "KeyC") face?.calibrate();

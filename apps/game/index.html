@@ -9,43 +9,55 @@
     <canvas id="scene"></canvas>
 
     <div class="hud top">
-      <div class="stat"><span class="label">Score</span><b id="score">0</b> <span id="combo" class="combo"></span></div>
+      <div class="stat"><span class="label">Score</span><b id="score">0</b></div>
       <div class="stat"><span class="label">Drones</span><b id="drones">0</b></div>
-      <div class="stat right"><span class="label">Time</span><b id="time">2:30</b></div>
+      <div class="progress"><i id="progress"></i></div>
     </div>
-    <div id="banner" class="banner"></div>
+    <div id="judgement" class="pop"></div>
+    <div id="bonus" class="pop"></div>
+    <div id="combo" class="combo"></div>
+    <div class="hud bottom">
+      <div class="lanes"><span class="lane"></span><span class="lane"></span><span class="lane"></span></div>
+      <div class="shown-wrap"><span class="label">Fingers</span><b id="shown">–</b></div>
+    </div>
     <div id="cam-wrap" class="cam" hidden>
       <video id="cam" playsinline muted></video>
       <div id="fingers" class="fingers"></div>
       <div id="face-warning" class="face-warning" hidden>Face not found</div>
     </div>
-    <p id="attribution" class="attribution"></p>
+    <p class="attribution"><span id="credit"></span><span id="attribution"></span></p>
 
     <div id="loading" class="screen">Loading the Bay…</div>
 
-    <div id="intro" class="screen" hidden>
+    <div id="menu" class="screen" hidden>
       <div class="panel">
         <h1>Swarm Strike</h1>
-        <p>Lead a drone swarm around the Golden Gate with your face.</p>
+        <p>Fly your drone swarm around the Golden Gate to the beat.</p>
         <ul>
-          <li><b>Turn your head</b> to steer, <b>nod</b> up or down to climb or dive</li>
-          <li><b>Show one finger</b> to send a drone at the nearest glowing orb — left hand to the left, right hand to the right. It does not come back. Keep your hand beside your face, not in front of it.</li>
-          <li><b>Open your mouth</b> to boost</li>
-          <li>Fly <b>under the bridge</b> for a bonus</li>
+          <li><b>Turn your head</b> to pick a lane — left, centre, right</li>
+          <li>Glowing orbs come at you on the beat, each with a number. <b>Show that many fingers</b> as you reach it</li>
+          <li>Right on the beat is <b>Perfect</b>. A missed orb hits your swarm; every 8 in a row brings a drone back</li>
         </ul>
-        <div class="buttons">
-          <button id="play-face" type="button" class="primary">Play with camera</button>
-          <button id="play-keys" type="button">Play with keyboard</button>
+        <div class="mode">
+          <label><input type="radio" name="mode" value="camera" checked /> Camera</label>
+          <label><input type="radio" name="mode" value="keyboard" /> Keyboard (← → lanes, hold 1–5)</label>
         </div>
-        <p class="small">Keyboard: arrows or WASD steer, Q / E strike left / right, Shift boost, C recenter. The camera image never leaves your device.</p>
+        <div id="songs" class="songs"></div>
+        <p class="small">Keep your hands beside your face, not in front of it. C recenters your head. The camera image never leaves your device.</p>
       </div>
     </div>
 
-    <div id="end" class="screen" hidden>
-      <div class="panel">
-        <h1>Run complete</h1>
+    <div id="results" class="screen" hidden>
+      <div class="panel results">
+        <div id="rank" class="rank">S</div>
+        <h1 id="result-title">Run complete</h1>
         <p class="big"><b id="final-score">0</b> points</p>
-        <div class="buttons"><button id="again" type="button" class="primary">Fly again</button></div>
+        <p id="result-detail" class="small"></p>
+        <p id="result-best" class="best"></p>
+        <div class="buttons">
+          <button id="again" type="button" class="primary">Play again</button>
+          <button id="to-menu" type="button">Songs</button>
+        </div>
       </div>
     </div>
 
