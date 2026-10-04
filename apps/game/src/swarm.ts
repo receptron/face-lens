@@ -17,12 +17,18 @@ interface Drone {
 const COUNT = 48;
 const NEIGHBOR_R = 45; // meters: who counts as a flockmate
 const SEPARATE_R = 9; // meters: personal space
+/**
+ * How hard followers match the leader's velocity. Lower = looser: the flock lags further in a
+ * turn and swings a little past the leader afterwards.
+ */
+const FOLLOW_GAIN = 1.07;
 const _m = new THREE.Matrix4();
 const _q = new THREE.Quaternion();
 const _forward = new THREE.Vector3(0, 0, -1);
-const LEADER_COLOR = new THREE.Color("#ffb84d");
-const FOLLOWER_COLOR = new THREE.Color("#8fe9ff");
-const STRIKE_COLOR = new THREE.Color("#ff3b2f").multiplyScalar(6);
+const LEADER_BODY = new THREE.Color("#d9772b");
+const FOLLOWER_BODY = new THREE.Color("#30343b");
+// Brighter than the bloom threshold, so it glows.
+const STRIKE_COLOR = new THREE.Color("#ff3b2f").multiplyScalar(8);
 const STRIKE_LIGHT_SCALE = new THREE.Vector3(5, 5, 5);
 
 /**
@@ -47,10 +53,11 @@ export class Swarm {
     this.setHeading(headingDeg, 0);
     this.mesh = new THREE.InstancedMesh(
       droneGeometry(),
-      new THREE.MeshStandardMaterial({ color: "#30343b", roughness: 0.45, metalness: 0.5 }),
+      // Body colour comes per instance: dark gray, the leader orange.
+      new THREE.MeshStandardMaterial({ color: "#ffffff", roughness: 0.45, metalness: 0.5 }),
       COUNT,
     );
-    // Small status LEDs: visible, but kept below the bloom threshold so they do not glow.
+    // Only drones on a strike carry a light (a red glow); the flock itself has none.
     this.lights = new THREE.InstancedMesh(new THREE.SphereGeometry(0.3, 6, 4), new THREE.MeshBasicMaterial({ color: "#ffffff" }), COUNT);
     this.mesh.frustumCulled = false;
     this.lights.frustumCulled = false;
@@ -165,7 +172,7 @@ export class Swarm {
         // what damps the swing: without it the flock overshoots the leader after every turn.
         const toSlot = leader.pos.clone().addScaledVector(this.heading, -25).sub(d.pos).multiplyScalar(0.8);
         if (toSlot.length() > speed * 0.9) toSlot.setLength(speed * 0.9);
-        const follow = leader.vel.clone().add(toSlot).sub(d.vel).multiplyScalar(1.6 * d.eagerness);
+        const follow = leader.vel.clone().add(toSlot).sub(d.vel).multiplyScalar(FOLLOW_GAIN * d.eagerness);
         // Slow wander: each drone drifts on its own, like birds jostling.
         const [a, b, c] = d.phase;
         const wander = new THREE.Vector3(Math.sin(t * 0.7 + a), Math.sin(t * 0.9 + b) * 0.6, Math.sin(t * 0.8 + c)).multiplyScalar(14);
@@ -254,12 +261,12 @@ export class Swarm {
   }
 
   private colorLights() {
-    this.drones.forEach((_, i) => this.lights.setColorAt(i, i === this.leaderIndex ? LEADER_COLOR : FOLLOWER_COLOR));
-    if (this.lights.instanceColor) this.lights.instanceColor.needsUpdate = true;
+    // Colours are written per frame in writeInstances; nothing to precompute.
   }
 
   private writeInstances() {
     let k = 0;
+    let l = 0;
     const scale = new THREE.Vector3(1, 1, 1);
     for (const [i, d] of this.drones.entries()) {
       if (!d.alive) continue;
@@ -267,19 +274,21 @@ export class Swarm {
       _q.setFromUnitVectors(_forward, dir);
       _m.compose(d.pos, _q, scale);
       this.mesh.setMatrixAt(k, _m);
-      // A drone on a strike lights up: a big red light, brighter than white so the bloom pass
-      // makes it glow, easy to follow on its way to the orb. Others keep a small, plain LED.
-      const striking = !!d.strike;
-      _m.compose(d.pos.clone().add(new THREE.Vector3(0, 0.45, 0)), _q, striking ? STRIKE_LIGHT_SCALE : scale);
-      this.lights.setMatrixAt(k, _m);
-      // Instance colours follow the drone, not the slot.
-      this.lights.setColorAt(k, striking ? STRIKE_COLOR : i === this.leaderIndex ? LEADER_COLOR : FOLLOWER_COLOR);
+      this.mesh.setColorAt(k, i === this.leaderIndex ? LEADER_BODY : FOLLOWER_BODY);
       k++;
+      // A drone on a strike glows red on its way to the orb.
+      if (d.strike) {
+        _m.compose(d.pos.clone().add(new THREE.Vector3(0, 0.45, 0)), _q, STRIKE_LIGHT_SCALE);
+        this.lights.setMatrixAt(l, _m);
+        this.lights.setColorAt(l, STRIKE_COLOR);
+        l++;
+      }
     }
     this.mesh.count = k;
-    this.lights.count = k;
+    this.lights.count = l;
     this.mesh.instanceMatrix.needsUpdate = true;
     this.lights.instanceMatrix.needsUpdate = true;
+    if (this.mesh.instanceColor) this.mesh.instanceColor.needsUpdate = true;
     if (this.lights.instanceColor) this.lights.instanceColor.needsUpdate = true;
   }
 }

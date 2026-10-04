@@ -1,27 +1,34 @@
 import { FaceLens } from "@receptron/face-lens";
 
-/** What the player is doing right now, from the face or the keyboard. */
+/** What the player is doing right now, from the face, the hands or the keyboard. */
 export interface Input {
   /** -1 (left) .. 1 (right): turn rate. */
   turn: number;
   /** -1 (down) .. 1 (up): climb. */
   climb: number;
-  /** Rising edges this frame. */
-  winkLeft: boolean;
-  winkRight: boolean;
+  /** Rising edges this frame: strike at a target on that side. */
+  strikeLeft: boolean;
+  strikeRight: boolean;
   boost: boolean;
-  /** Rising edge of a smile (not bound to an action yet). */
-  smile: boolean;
-  tongue: boolean;
   faceVisible: boolean;
+  /** Raised fingers per hand, for the HUD (null = hand not seen). */
+  fingers: { left: number | null; right: number | null };
 }
 
 const DEAD = 6; // degrees of head turn ignored around centre
+/** One finger must be up this long before it counts, so a passing hand shape does not fire. */
+const HOLD_MS = 120;
 
-/** Head turn → steering, nod → climb, wink → strike, open mouth → boost. */
+type Side = "left" | "right";
+
+/**
+ * Head turn → steering, nod → climb, open mouth → boost, and one raised finger → strike:
+ * the left hand at a target on the left, the right hand on the right. Each showing of one
+ * finger fires once; drop the hand (or change the count) to fire again.
+ */
 export class FaceControl {
-  private prev = { winkL: false, winkR: false, smile: false };
-  private lastWink = 0;
+  private oneSince: Record<Side, number> = { left: 0, right: 0 };
+  private armed: Record<Side, boolean> = { left: true, right: true };
 
   private constructor(
     readonly lens: FaceLens,
@@ -30,8 +37,8 @@ export class FaceControl {
 
   static async create(video: HTMLVideoElement): Promise<FaceControl> {
     const [lens, stream] = await Promise.all([
-      // Direction and expressions only: no attribute model, nothing heavy to download.
-      FaceLens.create({ attributes: false }),
+      // Direction, expressions and fingers; no attribute model, so nothing heavy to download.
+      FaceLens.create({ attributes: false, hands: true }),
       navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: "user" }, audio: false }),
     ]);
     video.srcObject = stream;
@@ -42,32 +49,38 @@ export class FaceControl {
   read(now: number): Input {
     const r = this.lens.detect(this.video, now);
     const f = r.face;
+    const fingers = { left: r.hands?.left?.count ?? null, right: r.hands?.right?.count ?? null };
+    const strike = (side: Side) => {
+      if (fingers[side] !== 1) {
+        this.oneSince[side] = 0;
+        this.armed[side] = true;
+        return false;
+      }
+      if (!this.oneSince[side]) this.oneSince[side] = now;
+      if (this.armed[side] && now - this.oneSince[side] >= HOLD_MS) {
+        this.armed[side] = false;
+        return true;
+      }
+      return false;
+    };
+    const strikeLeft = strike("left");
+    const strikeRight = strike("right");
     if (!f) {
-      this.prev = { winkL: false, winkR: false, smile: false };
-      return { turn: 0, climb: 0, winkLeft: false, winkRight: false, boost: false, smile: false, tongue: false, faceVisible: false };
+      return { turn: 0, climb: 0, strikeLeft, strikeRight, boost: false, faceVisible: false, fingers };
     }
     const shape = (deg: number, full: number) => {
       const a = Math.abs(deg);
       return a < DEAD ? 0 : Math.sign(deg) * Math.min(1, (a - DEAD) / (full - DEAD));
     };
-    const winkL = f.expressions["wink-left"] > 0.6;
-    const winkR = f.expressions["wink-right"] > 0.6;
-    const smile = f.expressions.smile > 0.7;
-    // A blink is not a wink: require one eye open; debounce strikes.
-    const fire = (cur: boolean, was: boolean) => cur && !was && now - this.lastWink > 350;
-    const out: Input = {
+    return {
       turn: shape(f.pose.yaw, 28),
       climb: shape(f.pose.pitch, 22),
-      winkLeft: fire(winkL, this.prev.winkL),
-      winkRight: fire(winkR, this.prev.winkR),
+      strikeLeft,
+      strikeRight,
       boost: f.expressions["mouth-open"] > 0.5,
-      smile: smile && !this.prev.smile,
-      tongue: false,
       faceVisible: true,
+      fingers,
     };
-    if (out.winkLeft || out.winkRight) this.lastWink = now;
-    this.prev = { winkL, winkR, smile };
-    return out;
   }
 
   calibrate() {
@@ -94,12 +107,11 @@ export class KeyboardControl {
     const out: Input = {
       turn: (k("ArrowRight", "KeyD") ? 1 : 0) - (k("ArrowLeft", "KeyA") ? 1 : 0),
       climb: (k("ArrowUp", "KeyW") ? 1 : 0) - (k("ArrowDown", "KeyS") ? 1 : 0),
-      winkLeft: p("KeyQ"),
-      winkRight: p("KeyE", "Space"),
+      strikeLeft: p("KeyQ"),
+      strikeRight: p("KeyE", "Space"),
       boost: k("ShiftLeft", "ShiftRight"),
-      smile: p("KeyF"),
-      tongue: false,
       faceVisible: true,
+      fingers: { left: null, right: null },
     };
     this.pressed.clear();
     return out;
@@ -112,11 +124,10 @@ export function merge(a: Input, b: Input): Input {
   return {
     turn: pick(a.turn, b.turn),
     climb: pick(a.climb, b.climb),
-    winkLeft: a.winkLeft || b.winkLeft,
-    winkRight: a.winkRight || b.winkRight,
+    strikeLeft: a.strikeLeft || b.strikeLeft,
+    strikeRight: a.strikeRight || b.strikeRight,
     boost: a.boost || b.boost,
-    smile: a.smile || b.smile,
-    tongue: a.tongue || b.tongue,
     faceVisible: a.faceVisible || b.faceVisible,
+    fingers: a.fingers.left !== null || a.fingers.right !== null ? a.fingers : b.fingers,
   };
 }

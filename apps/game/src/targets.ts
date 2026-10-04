@@ -25,7 +25,7 @@ export class Targets {
     for (let i = 0; i < count; i++) {
       const color = new THREE.Color(COLORS[i % COLORS.length]);
       // Brighter than white, so the bloom pass makes it glow.
-      const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: color.clone().multiplyScalar(3), toneMapped: false }));
+      const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: color.clone().multiplyScalar(5), toneMapped: false }));
       const halo = new THREE.Mesh(
         new THREE.SphereGeometry(16, 16, 12),
         new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.18, depthWrite: false, toneMapped: false }),

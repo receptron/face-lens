@@ -26,8 +26,9 @@ const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(62, 1, 1, 45000);
 const composer = new EffectComposer(renderer);
 composer.addPass(new RenderPass(scene, camera));
-// Threshold above 1: only things drawn brighter than white (orbs, lights) glow, not the sunlit bridge.
-const bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.9, 0.5, 1.0);
+// High threshold: only things drawn far brighter than white (orbs, strike drones) glow —
+// not the sunlit bridge, the hills or the water's glints.
+const bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.9, 0.5, 1.6);
 composer.addPass(bloom);
 composer.addPass(new OutputPass());
 
@@ -155,6 +156,8 @@ function frame(now: number) {
 function step(dt: number, t: number, now: number) {
   const input: Input = face ? merge(face.read(now), keys.read()) : keys.read();
   $("face-warning").hidden = !face || input.faceVisible;
+  const fg = input.fingers;
+  $("fingers").textContent = fg.left === null && fg.right === null ? "" : `L ${fg.left ?? "–"} · R ${fg.right ?? "–"}`;
 
   // Steering: head turn sets the turn rate, nod sets the climb angle.
   yaw = (yaw + input.turn * 58 * dt + 360) % 360;
@@ -176,11 +179,11 @@ function step(dt: number, t: number, now: number) {
   swarm.setHeading(yaw, pitch);
   const speed = input.boost ? 140 : 80;
 
-  // Strikes: left wink → target on the left, right wink → on the right.
+  // Strikes: one finger on the left hand → target on the left, right hand → on the right.
   const lockTarget = targets.pick(swarm.leader, swarm.heading, 950, 0);
   lockRing.visible = !!lockTarget;
   if (lockTarget) lockRing.position.copy(lockTarget.mesh.position);
-  for (const [fired, side] of [[input.winkLeft, -1], [input.winkRight, 1]] as const) {
+  for (const [fired, side] of [[input.strikeLeft, -1], [input.strikeRight, 1]] as const) {
     if (!fired) continue;
     const orb = targets.pick(swarm.leader, swarm.heading, 950, side) ?? lockTarget;
     if (!orb) {
@@ -188,7 +191,7 @@ function step(dt: number, t: number, now: number) {
       continue;
     }
     const color = (orb.mesh.material as THREE.MeshBasicMaterial).color.clone();
-    // One drone per wink, and it does not come back.
+    // One drone per strike, and it does not come back.
     const sent = swarm.strike(orb.mesh.position.clone(), () => {
       targets.destroy(orb);
       hitCount++;
@@ -249,7 +252,7 @@ async function start(useFace: boolean) {
   swarm.reset(START);
   running = true;
   if (face) setTimeout(() => face?.calibrate(), 600);
-  banner(face ? "Turn your head to steer · wink to strike" : "Arrows to steer · Q / E to strike", 3);
+  banner(face ? "Turn your head to steer · show one finger to strike" : "Arrows to steer · Q / E to strike", 3);
 }
 
 async function init() {

@@ -29,7 +29,8 @@ export class Bridge {
   private toLocal = new THREE.Matrix4();
 
   constructor() {
-    const mat = new THREE.MeshStandardMaterial({ color: ORANGE, roughness: 0.6, metalness: 0.2 });
+    // Matte painted steel: a glossy finish caught the low sun as a glaring, blooming highlight.
+    const mat = new THREE.MeshStandardMaterial({ color: ORANGE, roughness: 0.9, metalness: 0, envMapIntensity: 0.7 });
     this.addTowers(mat);
     this.addDeck(mat);
     this.addCables(mat);
@@ -91,7 +92,8 @@ export class Bridge {
         // Aviation light.
         const light = new THREE.Mesh(
           new THREE.SphereGeometry(1.2, 10, 8),
-          new THREE.MeshBasicMaterial({ color: new THREE.Color("#ff2a1a").multiplyScalar(4), toneMapped: false }),
+          // Plain red, below the bloom threshold: the bridge itself never glows.
+          new THREE.MeshBasicMaterial({ color: "#ff2a1a" }),
         );
         light.position.set((side * BRIDGE.cableSpacing) / 2, BRIDGE.towerHeight + 1.5, tz);
         this.group.add(light);
@@ -117,7 +119,7 @@ export class Bridge {
     const slab = new THREE.BoxGeometry(BRIDGE.deckWidth, 1.2, (2 * end) / segments);
     const truss = trussTexture();
     const trussMat = new THREE.MeshStandardMaterial({
-      color: ORANGE, map: truss, alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.6, metalness: 0.2,
+      color: ORANGE, map: truss, alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.9, metalness: 0, envMapIntensity: 0.7,
     });
     const roadMat = new THREE.MeshStandardMaterial({ color: "#3a3a3c", roughness: 0.9 });
     for (let i = 0; i < segments; i++) {
@@ -152,7 +154,7 @@ export class Bridge {
       const t = (a - half) / BRIDGE.sideSpan;
       return top + (BRIDGE.deckY - top) * t + 18 * Math.sin(Math.PI * t) * -0.5;
     };
-    const cableMat = new THREE.MeshStandardMaterial({ color: ORANGE, roughness: 0.5, metalness: 0.3 });
+    const cableMat = new THREE.MeshStandardMaterial({ color: ORANGE, roughness: 0.85, metalness: 0, envMapIntensity: 0.7 });
     const suspender = new THREE.CylinderGeometry(0.22, 0.22, 1, 5);
     suspender.translate(0, 0.5, 0);
     const spacing = 15.2;
