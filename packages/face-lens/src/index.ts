@@ -358,7 +358,9 @@ async function withDelegate<T>(make: (delegate: "GPU" | "CPU") => Promise<T>) {
 async function loadModel(opts: FaceLensOptions, name: string, required: boolean) {
   const base = withSlash(opts.modelUrl ?? DEFAULTS.modelUrl);
   const res = await fetch(`${base}${name}.json`);
-  if (!res.ok || !res.headers.get("content-type")?.includes("json")) {
+  // Hosts differ in the content type of .json (Hugging Face: text/plain); reject only an HTML
+  // page, which is what an SPA dev server answers for a missing file.
+  if (!res.ok || res.headers.get("content-type")?.includes("text/html")) {
     if (!required) return null;
     throw new Error(`face-lens: ${base}${name}.json → HTTP ${res.status}`);
   }
