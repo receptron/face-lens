@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Swarm Strike</title>
+    <meta name="description" content="Steer a drone swarm with your face — and the in-browser face, hand and clothing recognition behind it." />
+    <style>
+      :root {
+        --bg: #0e1116;
+        --surface: #171b22;
+        --line: #2a313c;
+        --text: #e8ecf1;
+        --muted: #8b95a3;
+        --accent: #78dcff;
+        color-scheme: dark;
+        font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background: var(--bg);
+        color: var(--text);
+        display: grid;
+        place-items: center;
+        padding: 24px 16px;
+      }
+      main {
+        max-width: 640px;
+        width: 100%;
+        display: grid;
+        gap: 20px;
+      }
+      h1 {
+        font-size: clamp(36px, 8vw, 56px);
+        margin: 0;
+        letter-spacing: 0.02em;
+      }
+      .lead {
+        color: var(--muted);
+        font-size: 18px;
+        margin: 0;
+        line-height: 1.5;
+      }
+      .card {
+        display: block;
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        padding: 18px 20px;
+        color: inherit;
+        text-decoration: none;
+      }
+      a.card:hover {
+        border-color: var(--accent);
+      }
+      .card h2 {
+        margin: 0 0 6px;
+        font-size: 18px;
+      }
+      .card p {
+        margin: 0;
+        color: var(--muted);
+        line-height: 1.5;
+      }
+      .soon {
+        opacity: 0.7;
+      }
+      .tag {
+        font-size: 12px;
+        color: var(--accent);
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+      }
+      footer {
+        color: var(--muted);
+        font-size: 14px;
+      }
+      footer a {
+        color: var(--accent);
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Swarm Strike</h1>
+      <p class="lead">Steer a drone swarm around the Bay with the turn of your head. Wink to strike. All of it runs in your browser; your camera never leaves your device.</p>
+      <a class="card" href="./lens/">
+        <span class="tag">Try it now</span>
+        <h2>Face Lens demo →</h2>
+        <p>Head direction, expressions, raised fingers, clothing color and style, live from your webcam.</p>
+      </a>
+      <div class="card soon">
+        <span class="tag">Coming soon</span>
+        <h2>The game</h2>
+        <p>Fly under the Golden Gate to the beat, then download your run as a video.</p>
+      </div>
+      <footer>
+        Built on <a href="https://www.npmjs.com/package/@receptron/face-lens">@receptron/face-lens</a> ·
+        <a href="https://github.com/receptron/face-lens">GitHub</a> ·
+        <a href="https://huggingface.co/snakajima/face-lens">Models</a>
+      </footer>
+    </main>
+  </body>
+</html>

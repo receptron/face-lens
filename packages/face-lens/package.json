@@ -1,7 +1,7 @@
 {
   "name": "@receptron/face-lens",
   "version": "0.1.0",
-  "description": "Real-time face attributes in the browser: head direction, expressions (wink, smile, tongue out…), and age, gender, emotion, hair and eye color. Runs fully on-device with MediaPipe and onnxruntime-web (WebGPU).",
+  "description": "Real-time face, hand and clothing attributes in the browser: head direction, expressions (wink, smile, tongue out…), age, gender, emotion, hair and eye color, raised fingers, clothing color and style. Runs fully on-device with MediaPipe and onnxruntime-web (WebGPU).",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -11,7 +11,11 @@
       "import": "./dist/index.js"
     }
   },
-  "files": ["dist", "README.md", "LICENSE"],
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "sideEffects": false,
   "scripts": {
     "build": "tsc -p tsconfig.json",
@@ -24,12 +28,25 @@
   "devDependencies": {
     "typescript": "^7.0.2"
   },
-  "keywords": ["face", "webcam", "mediapipe", "onnx", "webgpu", "expression", "head-pose", "emotion", "browser"],
+  "keywords": [
+    "face",
+    "webcam",
+    "mediapipe",
+    "onnx",
+    "webgpu",
+    "expression",
+    "head-pose",
+    "emotion",
+    "browser"
+  ],
   "repository": {
     "type": "git",
     "url": "git+https://github.com/receptron/face-lens.git",
     "directory": "packages/face-lens"
   },
   "homepage": "https://github.com/receptron/face-lens#readme",
-  "license": "Apache-2.0"
+  "license": "Apache-2.0",
+  "publishConfig": {
+    "access": "public"
+  }
 }
