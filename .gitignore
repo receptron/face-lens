@@ -13,3 +13,4 @@ apps/demo/public/__test__/
 apps/demo/public/mediapipe/
 apps/demo/public/ort/
 apps/demo/public/models/
+apps/game/public/__test__/

@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Swarm Strike</title>
+  </head>
+  <body>
+    <canvas id="scene"></canvas>
+
+    <div class="hud top">
+      <div class="stat"><span class="label">Score</span><b id="score">0</b> <span id="combo" class="combo"></span></div>
+      <div class="stat"><span class="label">Drones</span><b id="drones">0</b></div>
+      <div class="stat right"><span class="label">Time</span><b id="time">2:30</b></div>
+    </div>
+    <div id="banner" class="banner"></div>
+    <div id="cam-wrap" class="cam" hidden>
+      <video id="cam" playsinline muted></video>
+      <div id="face-warning" class="face-warning" hidden>Face not found</div>
+    </div>
+    <p id="attribution" class="attribution"></p>
+
+    <div id="loading" class="screen">Loading the Bay…</div>
+
+    <div id="intro" class="screen" hidden>
+      <div class="panel">
+        <h1>Swarm Strike</h1>
+        <p>Lead a drone swarm around the Golden Gate with your face.</p>
+        <ul>
+          <li><b>Turn your head</b> to steer, <b>nod</b> up or down to climb or dive</li>
+          <li><b>Wink</b> to send one drone at the nearest glowing orb on that side — it does not come back</li>
+          <li><b>Open your mouth</b> to boost</li>
+          <li>Fly <b>under the bridge</b> for a bonus</li>
+        </ul>
+        <div class="buttons">
+          <button id="play-face" type="button" class="primary">Play with camera</button>
+          <button id="play-keys" type="button">Play with keyboard</button>
+        </div>
+        <p class="small">Keyboard: arrows or WASD steer, Q / E strike left / right, Shift boost, C recenter. The camera image never leaves your device.</p>
+      </div>
+    </div>
+
+    <div id="end" class="screen" hidden>
+      <div class="panel">
+        <h1>Run complete</h1>
+        <p class="big"><b id="final-score">0</b> points</p>
+        <div class="buttons"><button id="again" type="button" class="primary">Fly again</button></div>
+      </div>
+    </div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

@@ -1,0 +1,13 @@
+{
+  "zoom": 13,
+  "tileX0": 1307,
+  "tileY0": 3163,
+  "width": 1536,
+  "height": 1024,
+  "west": -122.5634765625,
+  "east": -122.2998046875,
+  "north": 37.892195547244356,
+  "south": 37.75334401310657,
+  "encoding": "terrarium",
+  "attribution": "Terrain: Mapzen / AWS Terrain Tiles (USGS 3DEP, SRTM, GEBCO, ETOPO1 and others)"
+}

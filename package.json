@@ -9,6 +9,7 @@
   "scripts": {
     "build": "npm run build -w @receptron/face-lens && npm run build -w apps/demo",
     "dev": "npm run dev -w apps/demo",
-    "publish:lib": "npm run build -w @receptron/face-lens && npm publish -w @receptron/face-lens"
+    "publish:lib": "npm run build -w @receptron/face-lens && npm publish -w @receptron/face-lens",
+    "dev:game": "npm run dev -w apps/game"
   }
 }
