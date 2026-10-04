@@ -20,6 +20,10 @@ const SEPARATE_R = 9; // meters: personal space
 const _m = new THREE.Matrix4();
 const _q = new THREE.Quaternion();
 const _forward = new THREE.Vector3(0, 0, -1);
+const LEADER_COLOR = new THREE.Color("#ffb84d");
+const FOLLOWER_COLOR = new THREE.Color("#8fe9ff");
+const STRIKE_COLOR = new THREE.Color("#ff3b2f").multiplyScalar(6);
+const STRIKE_LIGHT_SCALE = new THREE.Vector3(5, 5, 5);
 
 /**
  * A flock that follows one steered drone, like birds behind a leader.
@@ -156,11 +160,12 @@ export class Swarm {
           ali.divideScalar(n).sub(d.vel).multiplyScalar(0.9);
           coh.divideScalar(n).sub(d.pos).multiplyScalar(0.25);
         }
-        // Follow the leader: aim at a point a little behind it, harder the further away we are.
-        const behind = leader.pos.clone().addScaledVector(this.heading, -25);
-        const toLeader = behind.sub(d.pos);
-        const far = toLeader.length();
-        const follow = toLeader.multiplyScalar((0.35 + Math.min(1.5, far / 120)) * d.eagerness);
+        // Follow the leader by matching its velocity, plus a correction toward a point a little
+        // behind it. Steering toward a desired velocity (not springing toward a position) is
+        // what damps the swing: without it the flock overshoots the leader after every turn.
+        const toSlot = leader.pos.clone().addScaledVector(this.heading, -25).sub(d.pos).multiplyScalar(0.8);
+        if (toSlot.length() > speed * 0.9) toSlot.setLength(speed * 0.9);
+        const follow = leader.vel.clone().add(toSlot).sub(d.vel).multiplyScalar(1.6 * d.eagerness);
         // Slow wander: each drone drifts on its own, like birds jostling.
         const [a, b, c] = d.phase;
         const wander = new THREE.Vector3(Math.sin(t * 0.7 + a), Math.sin(t * 0.9 + b) * 0.6, Math.sin(t * 0.8 + c)).multiplyScalar(14);
@@ -174,7 +179,7 @@ export class Swarm {
       if (acc.length() > maxAcc) acc.setLength(maxAcc);
       d.vel.addScaledVector(acc, dt);
       const v = d.vel.length();
-      const lo = d.strike ? speed : speed * 0.65;
+      const lo = d.strike ? speed : speed * 0.4;
       const hi = d.strike ? speed * 3 : speed * 1.45;
       if (v < lo) d.vel.setLength(lo);
       else if (v > hi) d.vel.setLength(hi);
@@ -213,6 +218,24 @@ export class Swarm {
     this.colorLights();
   }
 
+  /** Furthest any follower is ahead of the leader along its heading, in meters (overshoot). */
+  maxAhead() {
+    const leader = this.drones[this.leaderIndex];
+    let max = -Infinity;
+    for (const d of this.drones) {
+      if (!d.alive || d.strike || d === leader) continue;
+      max = Math.max(max, d.pos.clone().sub(leader.pos).dot(this.heading));
+    }
+    return max;
+  }
+
+  /** Flock centre relative to the leader: lateral (+ = right) and behind, in meters. */
+  offset() {
+    const c = this.centroid(new THREE.Vector3()).sub(this.leader);
+    const right = new THREE.Vector3().crossVectors(this.heading, new THREE.Vector3(0, 1, 0)).normalize();
+    return { lateral: c.dot(right), behind: -c.dot(this.heading) };
+  }
+
   /** True once every drone is lost. */
   get wiped() {
     return !this.drones[this.leaderIndex].alive;
@@ -231,9 +254,7 @@ export class Swarm {
   }
 
   private colorLights() {
-    const follower = new THREE.Color("#8fe9ff");
-    const lead = new THREE.Color("#ffb84d");
-    this.drones.forEach((_, i) => this.lights.setColorAt(i, i === this.leaderIndex ? lead : follower));
+    this.drones.forEach((_, i) => this.lights.setColorAt(i, i === this.leaderIndex ? LEADER_COLOR : FOLLOWER_COLOR));
     if (this.lights.instanceColor) this.lights.instanceColor.needsUpdate = true;
   }
 
@@ -246,10 +267,13 @@ export class Swarm {
       _q.setFromUnitVectors(_forward, dir);
       _m.compose(d.pos, _q, scale);
       this.mesh.setMatrixAt(k, _m);
-      _m.compose(d.pos.clone().add(new THREE.Vector3(0, 0.45, 0)), _q, scale);
+      // A drone on a strike lights up: a big red light, brighter than white so the bloom pass
+      // makes it glow, easy to follow on its way to the orb. Others keep a small, plain LED.
+      const striking = !!d.strike;
+      _m.compose(d.pos.clone().add(new THREE.Vector3(0, 0.45, 0)), _q, striking ? STRIKE_LIGHT_SCALE : scale);
       this.lights.setMatrixAt(k, _m);
       // Instance colours follow the drone, not the slot.
-      this.lights.setColorAt(k, i === this.leaderIndex ? new THREE.Color("#ffb84d") : new THREE.Color("#8fe9ff"));
+      this.lights.setColorAt(k, striking ? STRIKE_COLOR : i === this.leaderIndex ? LEADER_COLOR : FOLLOWER_COLOR);
       k++;
     }
     this.mesh.count = k;

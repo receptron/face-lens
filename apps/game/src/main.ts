@@ -114,7 +114,7 @@ function hud() {
   $("combo").textContent = combo > 1 ? `×${combo}` : "";
   if (import.meta.env.DEV) {
     document.body.dataset.state = JSON.stringify({
-      score, drones: swarm.count, under: wasUnder, bridgeHits: bridgeHitCount, hits: hitCount, strikeCrashes: swarm.strikeCrashes, x: Math.round(swarm.leader.x), y: Math.round(swarm.leader.y), z: Math.round(swarm.leader.z), yaw: Math.round(yaw),
+      score, drones: swarm.count, under: wasUnder, bridgeHits: bridgeHitCount, hits: hitCount, strikeCrashes: swarm.strikeCrashes, ahead: Math.round(swarm.maxAhead()), lateral: Math.round(swarm.offset().lateral), behind: Math.round(swarm.offset().behind), x: Math.round(swarm.leader.x), y: Math.round(swarm.leader.y), z: Math.round(swarm.leader.z), yaw: Math.round(yaw),
     });
   }
 }
