@@ -33,6 +33,20 @@ GARMENTS = [
     "sweatshirt", "jacket", "denim jacket", "leather jacket", "coat", "winter coat", "suit",
     "blazer", "dress", "sundress", "tank top", "sleeveless top", "uniform", "jersey", "kimono",
 ]
+# Round 2: more garment words, and plain people photos (Bonsai decides the garment).
+GARMENTS_2 = [
+    "tee shirt", "jumper", "pullover", "fleece", "parka", "trench coat", "puffer jacket", "windbreaker",
+    "bomber jacket", "vest", "waistcoat", "tuxedo", "gown", "camisole", "henley shirt", "flannel shirt",
+    "oxford shirt", "linen shirt", "sports jersey", "lab coat", "scrubs", "overalls", "raincoat",
+    "track jacket", "crop top", "halter top", "shirt and tie", "sweater vest", "poncho", "apron",
+]
+PEOPLE = [
+    "portrait", "headshot", "speaker", "selfie", "street portrait", "office worker", "student",
+    "graduation", "concert crowd", "festival people", "market vendor", "teacher", "scientist",
+    "engineer", "musician", "chef", "volunteer", "tourist", "conference", "interview",
+    "smiling woman", "smiling man", "young man", "young woman", "old man", "old woman",
+    "family photo", "friends", "team photo", "commuter", "barista", "nurse", "artist portrait",
+]
 # Short queries: Openverse matches titles and tags, so long phrases return almost nothing.
 WHO = ["", "man ", "woman "]
 
@@ -41,15 +55,23 @@ def queries():
     for g in GARMENTS:
         for who in WHO:
             yield f"{who}{g}"
+    for g in GARMENTS_2:
+        for who in WHO:
+            yield f"{who}{g}"
+    yield from PEOPLE
 
 
 def candidates():
+    """All candidates so far; queries already run (recorded in queries_done.json) are skipped."""
     path = OUT / "candidates.json"
-    if path.exists():
-        return json.loads(path.read_text())
-    seen, out = set(), []
+    done_path = OUT / "queries_done.json"
+    out = json.loads(path.read_text()) if path.exists() else []
+    done = set(json.loads(done_path.read_text())) if done_path.exists() else {c["query"] for c in out}
+    seen = {c["url"] for c in out}
     for q in queries():
-        for page in range(1, 9):
+        if q in done:
+            continue
+        for page in range(1, 13):
             params = {"q": q, "page": page, "page_size": 20, "license": "by,cc0,pdm"}
             try:
                 d = get_json("https://api.openverse.org/v1/images/?" + urllib.parse.urlencode(params))
@@ -70,8 +92,10 @@ def candidates():
             if page >= d.get("page_count", 0):
                 break
             time.sleep(2)
+        done.add(q)
+        path.write_text(json.dumps(out, indent=1))
+        done_path.write_text(json.dumps(sorted(done)))
         print(f"{q!r}: {len(out)} total", flush=True)
-    path.write_text(json.dumps(out, indent=1))
     return out
 
 
