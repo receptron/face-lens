@@ -230,6 +230,14 @@ export class FaceLens {
     return { timestamp, face, hands: this.lastHands, clothing: this.lastClothing };
   }
 
+  /**
+   * Changes how often hands and clothing run, or the smoothing, while running — e.g. to
+   * lighten the load on a slow device. Hands and clothing must have been enabled at create().
+   */
+  configure(options: Pick<FaceLensOptions, "handsEvery" | "clothingEvery" | "smoothing">) {
+    this.opts = { ...this.opts, ...options, smoothing: { ...this.opts.smoothing, ...options.smoothing } };
+  }
+
   /** Treats the current head pose as "center" (webcams sit above or below the eyes). */
   calibrate() {
     if (this.lastPose) this.direction.center = { ...this.lastPose };

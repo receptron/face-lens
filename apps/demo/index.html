@@ -16,9 +16,23 @@
     <main class="layout">
       <section class="left">
         <div class="stage-wrap">
-          <div class="stage">
+          <div class="stage" id="stage-root">
             <video id="video" playsinline muted></video>
             <canvas id="overlay"></canvas>
+            <!-- Phone layout only: key results drawn over the video, summary at the bottom. -->
+            <div class="hud" aria-hidden="true">
+              <div id="hud-dir" class="hud-dir"></div>
+              <div class="hud-bottom">
+                <div id="hud-expr" class="hud-expr"></div>
+                <div id="hud-hands" class="hud-hands"></div>
+              </div>
+            </div>
+            <button id="summary" class="summary" type="button" aria-expanded="false">
+              <span id="sum-face" class="sum-line"></span>
+              <span id="sum-look" class="sum-line"></span>
+              <span id="sum-cloth" class="sum-line"></span>
+              <span class="sum-more">Details ▴</span>
+            </button>
             <div id="start" class="start">
               <button id="start-button" type="button">Start camera</button>
               <p>Everything runs on this device. No image leaves the browser.</p>

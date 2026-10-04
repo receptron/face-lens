@@ -12,6 +12,10 @@ const statusEl = $("status");
 // Everything is served next to the page (see scripts/assets.mjs); VITE_MODEL_URL can point the
 // attribute model elsewhere, e.g. the Hugging Face repo.
 const local = (p: string) => new URL(p, location.href).href;
+/** Phone layout (portrait or landscape): full-screen camera with results drawn over it. */
+const PHONE_QUERY = matchMedia("(max-width: 700px), (max-height: 500px)");
+const PHONE = PHONE_QUERY.matches;
+
 const ASSETS = {
   modelUrl: import.meta.env.VITE_MODEL_URL ?? local("./models/"),
   mediapipeWasm: local("./mediapipe/wasm"),
@@ -20,6 +24,9 @@ const ASSETS = {
   segmenter: local("./models/selfie_multiclass_256x256.tflite"),
   hands: true,
   clothing: true,
+  // Phones: lighter cadence for the extra models (they also get slowed further if fps drops).
+  handsEvery: PHONE ? 3 : 2,
+  clothingEvery: PHONE ? 15 : 8,
   ortWasm: { wasm: local("./ort/ort-wasm-simd-threaded.asyncify.wasm") },
 };
 
@@ -144,6 +151,65 @@ function renderClothing(c: Clothing | null) {
 
 let lens: FaceLens | null = null;
 let last: Face | null = null;
+let slowSeconds = 0;
+let clothingPaused = false;
+
+function portrait() {
+  return matchMedia("(orientation: portrait)").matches && PHONE_QUERY.matches;
+}
+
+// --- Phone overlay -----------------------------------------------------------
+
+let lastHud = "";
+function renderHud(face: Face | null, hands: Hands | null) {
+  const on = face
+    ? (Object.entries(face.expressions) as [string, number][]).filter(([, v]) => v > 0.5).map(([k]) => k)
+    : [];
+  if ((face?.attributes?.tongue?.probs.yes ?? 0) > 0.5) on.push("tongue-out");
+  const dir = face ? GLYPH[face.direction] : "";
+  const handText = hands && (hands.left || hands.right)
+    ? `✋ L${hands.left?.count ?? "–"} R${hands.right?.count ?? "–"} · ${hands.total}`
+    : "";
+  const key = `${dir}|${on.join(",")}|${handText}`;
+  if (key === lastHud) return;
+  lastHud = key;
+  $("hud-dir").textContent = dir;
+  $("hud-dir").hidden = !face;
+  $("hud-expr").innerHTML = on.map((e) => `<span class="chip on">${e}</span>`).join("");
+  $("hud-hands").textContent = handText;
+}
+
+let lastSummary = "";
+function renderSummary(face: Face | null, clothing: Clothing | null) {
+  const a = face?.attributes;
+  const pct = (x?: { confidence: number }) => (x ? ` ${Math.round(x.confidence * 100)}%` : "");
+  const lines = !face
+    ? ["No face — look at the camera", "", ""]
+    : !a
+      ? ["Analyzing…", "", ""]
+      : [
+          [a.gender && `${a.gender.label}${pct(a.gender)}`, a.age && `age ${a.age.label}`, a.emotion && `${a.emotion.label}${pct(a.emotion)}`]
+            .filter(Boolean).join(" · "),
+          [a.hair && `${a.hair.label} hair`, a.eyes && `${a.eyes.label} eyes`].filter(Boolean).join(" · "),
+          [clothing?.style?.label, clothing?.pattern?.label, clothing?.colors[0]?.name].filter(Boolean).join(" · "),
+        ];
+  const key = lines.join("|");
+  if (key === lastSummary) return;
+  lastSummary = key;
+  $("sum-face").textContent = lines[0];
+  $("sum-look").textContent = lines[1];
+  $("sum-cloth").textContent = lines[2];
+}
+
+$("summary").addEventListener("click", () => {
+  const open = document.body.classList.toggle("details-open");
+  $("summary").setAttribute("aria-expanded", String(open));
+  $("summary").querySelector(".sum-more")!.textContent = open ? "Close ▾" : "Details ▴";
+});
+// Keep the overlay chips just above the summary, whatever its height.
+new ResizeObserver(([e]) => {
+  $("stage-root").style.setProperty("--summary-h", `${Math.round(e.contentRect.height + 22)}px`);
+}).observe($("summary"));
 
 async function start() {
   $("start-button").setAttribute("disabled", "");
@@ -151,7 +217,10 @@ async function start() {
   const [created, stream] = await Promise.all([
     FaceLens.create(ASSETS),
     navigator.mediaDevices.getUserMedia({
-      video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: "user" },
+      // A held phone wants a portrait frame; everything else 16:9.
+      video: portrait()
+        ? { width: { ideal: 720 }, height: { ideal: 960 }, facingMode: "user" }
+        : { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: "user" },
       audio: false,
     }),
   ]);
@@ -176,6 +245,8 @@ async function start() {
       renderAttributes(last);
       renderHands(r.hands);
       renderClothing(r.clothing);
+      renderHud(last, r.hands);
+      renderSummary(last, r.clothing);
       drawOverlay();
       frames++;
       if (now - fpsStart > 1000) {
@@ -183,6 +254,13 @@ async function start() {
         frames = 0;
         fpsStart = now;
         statusEl.textContent = `${fps.toFixed(0)} fps · tracker ${lens!.trackerDelegate} · attributes ${lens!.backend ?? "off"}`;
+        // Slow device: pause clothing (the heaviest extra) after 5 seconds under 12 fps.
+        slowSeconds = fps < 12 ? slowSeconds + 1 : 0;
+        if (slowSeconds >= 5 && !clothingPaused) {
+          clothingPaused = true;
+          lens!.configure({ clothingEvery: Number.MAX_SAFE_INTEGER, handsEvery: 4 });
+        }
+        if (clothingPaused) statusEl.textContent += " · clothing paused (slow device)";
       }
     }
     requestAnimationFrame(tick);
