@@ -1,6 +1,6 @@
 {
   "name": "@receptron/face-lens",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Real-time face, hand and clothing attributes in the browser: head direction, expressions (wink, smile, tongue out…), age, gender, emotion, hair and eye color, raised fingers, clothing color and style. Runs fully on-device with MediaPipe and onnxruntime-web (WebGPU).",
   "type": "module",
   "main": "./dist/index.js",
